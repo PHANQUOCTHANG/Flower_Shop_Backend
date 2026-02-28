@@ -1,0 +1,67 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+
+// user
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  STAFF
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  FACEBOOK
+}
+
+
+model User {
+  /// Primary Key sử dụng BigInt cho khả năng mở rộng lớn
+  id          BigInt   @id @default(autoincrement())
+
+  /// Thông tin cơ bản
+  fullName    String   @map("full_name") @db.VarChar(150)
+  email       String   @unique @db.VarChar(150)
+  phone       String?  @db.VarChar(20)
+
+  /// Xác thực
+  password    String?  @db.VarChar(255)
+  provider    AuthProvider @default(LOCAL)
+  providerId  String?  @map("provider_id") @db.VarChar(255)
+
+  /// Phân quyền
+  role        UserRole @default(CUSTOMER)
+
+  /// Ảnh đại diện
+  avatar      String?  @db.Text
+
+  /// Trạng thái tài khoản
+  isActive      Boolean @default(true) @map("is_active")
+  emailVerified Boolean @default(false) @map("email_verified")
+
+  /// Theo dõi hoạt động
+  lastLogin   DateTime? @map("last_login") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
+
+  /// Chỉ mục (Indexes) để tối ưu truy vấn
+  @@index([deletedAt])
+  @@index([provider, providerId])
+  
+  /// Ánh xạ tên bảng trong Database là số nhiều và viết thường
+  @@map("users")
+}
