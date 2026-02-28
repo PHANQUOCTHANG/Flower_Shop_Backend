@@ -1,6 +1,6 @@
 import AppError from "@/utils/appError";
 import { IReviewRepository } from "@/repositories/review.repository";
-import { IProductRepository } from "@/repositories/product.repository";
+import { IProductRepository } from "@/module/product/product.repository";
 import { CreateReviewRequestDto } from "@/dto/request/review.request";
 import { IReviewDocument } from "@/interface/review.interface";
 import { BaseQuery, IPaginatedResult, normalizeQuery } from "@/utils/query";

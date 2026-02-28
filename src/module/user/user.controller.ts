@@ -4,10 +4,6 @@ import { ApiResponse } from "@/utils/apiResponse";
 import { userService } from "@/config/container";
 import { normalizeQuery } from "@/utils/query";
 
-/**
- * User Controller
- * Xử lý HTTP layer, không chứa business logic
- */
 
 // [POST] /api/v1/users - Tạo người dùng
 export const createUser = asyncHandler(async (req: Request, res: Response) => {
