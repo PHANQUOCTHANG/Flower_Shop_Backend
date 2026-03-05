@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { productService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
-import { normalizeQuery } from "@/utils/query";
 import asyncHandler from "@/utils/asyncHandler";
+import { normalizeQueryProduct } from "@/module/product/product.type";
 
 // [POST] /api/v1/products - Tạo sản phẩm
 export const createProduct = asyncHandler(
@@ -16,7 +16,7 @@ export const createProduct = asyncHandler(
 
 // [GET] /api/v1/products - Lấy danh sách sản phẩm
 export const getProducts = asyncHandler(async (req: Request, res: Response) => {
-  const query = normalizeQuery(req.query);
+  const query = normalizeQueryProduct(req.query);
   const result = await productService.findAll(query);
   return res.status(200).json(ApiResponse.paginate(result));
 });
@@ -24,6 +24,12 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
 // [GET] /api/v1/products/:id - Chi tiết sản phẩm
 export const getProduct = asyncHandler(async (req: Request, res: Response) => {
   const data = await productService.findById(req.params.id as string);
+  return res.status(200).json(ApiResponse.success(data));
+});
+
+// [GET] /api/v1/products/:id - Chi tiết sản phẩm
+export const getProductBySlug = asyncHandler(async (req: Request, res: Response) => {
+  const data = await productService.findBySlug(req.params.slug as string);
   return res.status(200).json(ApiResponse.success(data));
 });
 

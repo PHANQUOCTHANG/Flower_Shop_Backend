@@ -24,4 +24,6 @@ router.route("/:id")
   )
   .delete(validationMiddleware(ProductIdParamSchema, "params"), productCtrl.deleteProduct);
 
+router.route("/slug/:slug").get(productCtrl.getProductBySlug)
+
 export default router;

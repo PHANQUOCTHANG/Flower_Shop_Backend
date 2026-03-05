@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+// [Schema] Hình ảnh đi kèm sản phẩm
+const productImagesSchema = z.object({
+  imageUrl: z.string().url("Link ảnh không hợp lệ"),
+  isPrimary: z.boolean().default(false),
+  sortOrder: z.number().int().default(0),
+});
+
 const productBase = z.object({
   name: z
     .string()
@@ -31,6 +38,12 @@ const productBase = z.object({
   metaTitle: z.string().max(255).nullable().optional()  ,
 
   metaDescription: z.string().nullable().optional(),
+
+  // Danh sách ID danh mục (truyền dưới dạng chuỗi số)
+  categoryIds: z.array(z.string().regex(/^\d+$/)).optional(),
+  
+  // Danh sách ảnh
+  images: z.array(productImagesSchema).optional(),
 });
 
 // [Schema] Tạo sản phẩm

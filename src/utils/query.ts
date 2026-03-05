@@ -1,8 +1,8 @@
 export interface BaseQuery {
-  page: number;
-  limit: number;
-  search: string;
-  sort: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  sort?: string;
 }
 
 // Chuẩn hóa query, tránh undefined & giới hạn dữ liệu xấu

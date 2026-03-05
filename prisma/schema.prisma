@@ -21,6 +21,7 @@ enum UserRole {
   STAFF
 }
 
+
 enum AuthProvider {
   LOCAL
   GOOGLE
@@ -68,19 +69,19 @@ model User {
 
 
 // RefreshToken 
-model RefreshToken {
-  id        BigInt   @id @default(autoincrement())
-  token     String   @unique @db.VarChar(255)
-  userId    BigInt   @unique @map("user_id") // Mỗi user duy nhất 1 token để tránh rác DB
-  revoked   Boolean  @default(false)
-  expiresAt DateTime @map("expires_at") @db.Timestamptz
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+// model RefreshToken {
+//   id        BigInt   @id @default(autoincrement())
+//   token     String   @unique @db.VarChar(255)
+//   userId    BigInt   @unique @map("user_id") // Mỗi user duy nhất 1 token để tránh rác DB
+//   revoked   Boolean  @default(false)
+//   expiresAt DateTime @map("expires_at") @db.Timestamptz
+//   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  // // Quan hệ với User, tự động xóa token nếu User bị xóa vật lý
-  // user      User     @relation(fields: [userId], references: id, onDelete: Cascade)
+//   // // Quan hệ với User, tự động xóa token nếu User bị xóa vật lý
+//   // user      User     @relation(fields: [userId], references: id, onDelete: Cascade)
 
-  @@map("refresh_tokens")
-}
+//   @@map("refresh_tokens")
+// }
 
 // product 
 model Product {
@@ -107,6 +108,12 @@ model Product {
   deletedAt         DateTime? @map("deleted_at") @db.Timestamp
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+
+  // Quan hệ với bảng trung gian Categories
+  categories        ProductCategory[]
+  
+  // Quan hệ với bảng Images
+  images            ProductImage[]
 
   @@map("products")
   @@index([slug], name: "idx_products_slug")
@@ -138,9 +145,37 @@ model Category {
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamp
   updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp
 
+  products ProductCategory[]
+
   @@map("categories")
   @@index([slug], name: "idx_categories_slug")
   @@index([parentId], name: "idx_categories_parent")
   @@index([status], name: "idx_categories_status")
   @@index([sortOrder], name: "idx_categories_sort")
+}
+
+// product-category
+model ProductCategory {
+  productId  BigInt   @map("product_id")
+  categoryId BigInt   @map("category_id")
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@map("product_categories")
+}
+
+// product-image
+model ProductImage {
+  id         BigInt   @id @default(autoincrement())
+  productId  BigInt   @map("product_id")
+  imageUrl   String   @map("image_url") @db.Text
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+  @@index([productId], name: "idx_product_images_product")
 }
