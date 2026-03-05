@@ -1,6 +1,6 @@
 import nodemailer, { Transporter } from "nodemailer";
 import AppError from "@/utils/appError";
-import { IEmailData } from "@/interface/email.interface";
+import { IEmailData } from "@/module/auth/email/email.type";
 
 export interface IEmailService {
   send(to: string, subject: string, html: string): Promise<void>;

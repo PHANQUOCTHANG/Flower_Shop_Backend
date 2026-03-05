@@ -2,20 +2,22 @@ import { authService, otpService } from "@/config/container";
 import asyncHandler from "@/utils/asyncHandler";
 import { Request, Response } from "express";
 
-// POST | /api/auth/register | Đăng ký tài khoản
+// Cookie config dùng chung
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
+// POST | /api/auth/register
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
 
-  // Lưu refresh token vào cookie (HttpOnly)
-  res.cookie("refreshToken", result.refreshToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/api/auth/refresh",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  // Lưu refresh token vào cookie
+  res.cookie("refreshToken", result.refreshToken, cookieOptions);
 
-  // Chỉ trả access token và thông tin user cho FE
   res.status(201).json({
     status: "success",
     data: {
@@ -25,19 +27,13 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-// POST | /api/auth/login | Đăng nhập
+// POST | /api/auth/login
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.login(req.body);
-  // Lưu refresh token vào cookie (HttpOnly)
-  res.cookie("refreshToken", result.refreshToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/api/auth/refresh",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
 
-  // Trả access token và thông tin user
+  // Lưu refresh token
+  res.cookie("refreshToken", result.refreshToken, cookieOptions);
+
   res.status(200).json({
     status: "success",
     data: {
@@ -47,77 +43,87 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-// POST | /api/auth/refresh | Làm mới access token
+// POST | /api/auth/refresh
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
-  // Lấy refresh token từ cookie
-  const refreshToken = req.cookies.refreshToken;
+  const refreshToken = req.cookies?.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(401).json({
+      status: "error",
+      message: "Refresh token missing",
+    });
+  }
 
   const result = await authService.refresh(refreshToken);
 
-  // Rotate refresh token mới vào cookie
-  res.cookie("refreshToken", result.refreshToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "strict",
-    path: "/api/auth/refresh",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  // Rotate refresh token
+  res.cookie("refreshToken", result.refreshToken, cookieOptions);
 
-  // Chỉ trả access token mới
   res.status(200).json({
     status: "success",
     data: {
       accessToken: result.accessToken,
-      user : result.user
+      user: result.user,
     },
   });
 });
 
-// POST | /api/auth/logout | Đăng xuất
+// POST | /api/auth/logout
 export const logout = asyncHandler(async (req: Request, res: Response) => {
-  // Lấy refresh token từ cookie
-  const refreshToken = req.cookies.refreshToken;
+  const refreshToken = req.cookies?.refreshToken;
 
-  // Thu hồi refresh token trong DB
-  await authService.logout(refreshToken);
+  if (refreshToken) {
+    await authService.logout(refreshToken);
+  }
 
-  // Xóa refresh token khỏi cookie
   res.clearCookie("refreshToken", {
-    path: "/api/auth/refresh",
+    path: "/",
   });
 
-  res.status(204).json({ status: "success", data: null });
+  res.status(204).json({
+    status: "success",
+    data: null,
+  });
 });
 
-// POST | /api/auth/send-otp | Gửi mã OTP
+// POST | /api/auth/send-otp
 export const sendOtp = asyncHandler(async (req: Request, res: Response) => {
   const { email } = req.body;
 
-  // Gửi OTP về email
   await otpService.send(email);
 
-  res.status(204).json({ status: "success", data: null });
+  res.status(204).json({
+    status: "success",
+    data: null,
+  });
 });
 
-// POST | /api/auth/verify-otp | Xác thực OTP
+// POST | /api/auth/verify-otp
 export const verifyOtp = asyncHandler(async (req: Request, res: Response) => {
   const { email, otp } = req.body;
 
-  // Xác thực OTP người dùng nhập
   await otpService.verify(email, otp);
 
-  res.status(204).json({ status: "success", data: null });
+  res.status(204).json({
+    status: "success",
+    data: null,
+  });
 });
 
-// POST | /api/auth/reset-password | Đặt lại mật khẩu
+// POST | /api/auth/reset-password
 export const resetPassword = asyncHandler(
   async (req: Request, res: Response) => {
-    console.log(req.body);
     const { email, otp, newPassword } = req.body;
 
-    // Đặt lại mật khẩu sau khi OTP hợp lệ
-    await authService.resetPassword(email, otp, newPassword);
+    await authService.resetPassword({
+      email,
+      otp,
+      newPassword,
+    });
 
-    res.status(204).json({ status: "success", data: null });
+    res.status(204).json({
+      status: "success",
+      data: null,
+    });
   }
 );

@@ -7,6 +7,7 @@ export interface IUserRepository {
   findById(id: bigint): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
   updateById(id: bigint, data: Prisma.UserUpdateInput): Promise<User | null>;
+  updateByEmail(email: string, data: any): Promise<User | null>;
   softDelete(id: bigint): Promise<void>;
 }
 
@@ -76,6 +77,14 @@ export class UserRepository implements IUserRepository {
       if (error.code === "P2025") return null; // Not found
       throw error;
     }
+  }
+
+  // Cập nhật theo Email (Dùng cho logic Reset Password)
+  async updateByEmail(email: string, data: any): Promise<User | null> {
+    return this.prisma.user.update({
+      where: { email },
+      data,
+    });
   }
 
   // Soft delete

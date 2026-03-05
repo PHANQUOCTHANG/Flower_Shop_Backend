@@ -26,6 +26,32 @@ CREATE TABLE "users" (
 );
 
 -- CreateTable
+CREATE TABLE "refresh_tokens" (
+    "id" BIGSERIAL NOT NULL,
+    "user_id" BIGINT NOT NULL,
+    "token" TEXT NOT NULL,
+    "expires_at" TIMESTAMP NOT NULL,
+    "revoked" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP NOT NULL,
+
+    CONSTRAINT "refresh_tokens_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "otps" (
+    "id" BIGSERIAL NOT NULL,
+    "email" VARCHAR(255) NOT NULL,
+    "otp_hash" TEXT NOT NULL,
+    "expires_at" TIMESTAMP NOT NULL,
+    "verified" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP NOT NULL,
+
+    CONSTRAINT "otps_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "products" (
     "id" BIGSERIAL NOT NULL,
     "name" VARCHAR(255) NOT NULL,
@@ -98,6 +124,15 @@ CREATE INDEX "users_// deleted_at_idx" ON "users"("// deleted_at");
 CREATE INDEX "users_provider_provider_id_idx" ON "users"("provider", "provider_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "refresh_tokens"("token");
+
+-- CreateIndex
+CREATE INDEX "idx_refresh_tokens_user" ON "refresh_tokens"("user_id");
+
+-- CreateIndex
+CREATE INDEX "idx_otps_email" ON "otps"("email");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "products_slug_key" ON "products"("slug");
 
 -- CreateIndex
@@ -132,6 +167,9 @@ CREATE INDEX "idx_categories_sort" ON "categories"("sort_order");
 
 -- CreateIndex
 CREATE INDEX "idx_product_images_product" ON "product_images"("product_id");
+
+-- AddForeignKey
+ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "categories" ADD CONSTRAINT "categories_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;

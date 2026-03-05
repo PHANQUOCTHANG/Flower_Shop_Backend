@@ -1,72 +1,72 @@
-import { AddressRequestDto } from "@/dto/request/address.request";
-import { Type } from "class-transformer";
-import {
-  IsEmail,
-  IsNotEmpty,
-  MinLength,
-  IsString,
-  ValidateNested,
-  IsOptional,
-  IsEnum,
-} from "class-validator";
+import { z } from "zod";
 
-// DTO đăng nhập
-export class LoginRequestDto {
-  @IsEmail({}, { message: "Email không hợp lệ" })
-  @IsNotEmpty({ message: "Email không được để trống" })
-  email!: string;
+// [UserRole] Enum từ Prisma: CUSTOMER | ADMIN | STAFF
+const UserRoleEnum = z.enum(["CUSTOMER", "ADMIN", "STAFF"]);
 
-  @IsString({ message: "Mật khẩu không hợp lệ" })
-  @MinLength(8, { message: "Mật khẩu tối thiểu 8 ký tự" })
-  password!: string;
-}
+// [AuthProvider] Enum từ Prisma: LOCAL | GOOGLE | FACEBOOK
+const AuthProviderEnum = z.enum(["LOCAL", "GOOGLE", "FACEBOOK"]);
 
-// DTO đăng ký
-export class RegisterRequestDto {
-  @IsString({ message: "Họ tên không hợp lệ" })
-  @IsNotEmpty({ message: "Họ tên không được để trống" })
-  fullName!: string;
+// Request Đăng ký tài khoản
+export const registerSchema = z.object({
+  // Tên đầy đủ (full_name) - tối đa 150 ký tự theo DB
+  fullName: z
+    .string()
+    .min(2, "Họ tên quá ngắn")
+    .max(150, "Họ tên không được vượt quá 150 ký tự")
+    .trim(),
 
-  @IsEmail({}, { message: "Email không hợp lệ" })
-  email!: string;
+  // Email duy nhất - chuẩn hóa về chữ thường
+  email: z
+    .string()
+    .email("Định dạng email không hợp lệ")
+    .max(150)
+    .toLowerCase()
+    .trim(),
 
-  @IsOptional()
-  @IsString({ message: "Số điện thoại không hợp lệ" })
-  phone?: string;
+  // Mật khẩu - tối thiểu 8 ký tự để đảm bảo bảo mật
+  password: z.string().min(8, "Mật khẩu phải có ít nhất 8 ký tự").max(255),
 
-  @IsString({ message: "Mật khẩu không hợp lệ" })
-  @MinLength(8, { message: "Mật khẩu tối thiểu 8 ký tự" })
-  password!: string;
+  // Số điện thoại - chỉ chứa số, tối đa 20 ký tự
+  phone: z
+    .string()
+    .regex(/^[0-9]+$/, "Số điện thoại chỉ được chứa chữ số")
+    .min(10, "Số điện thoại không hợp lệ")
+    .max(20)
+    .optional(),
 
-  @IsOptional()
-  @IsEnum(["ADMIN", "STAFF", "CUSTOMER"], {
-    message: "Role phải là ADMIN | STAFF | CUSTOMER",
-  })
-  role?: "ADMIN" | "STAFF" | "CUSTOMER";
+  // Quyền người dùng - mặc định là CUSTOMER
+  role: UserRoleEnum.default("CUSTOMER").optional(),
+});
 
-  @IsOptional()
-  @ValidateNested({ each: true })
-  @Type(() => AddressRequestDto)
-  addresses?: AddressRequestDto[];
-}
+// Request Đăng nhập
+export const loginSchema = z.object({
+  email: z.string().email("Email không hợp lệ").toLowerCase().trim(),
 
-// DTO refresh token
-export class RefreshTokenRequestDto {
-  @IsString({ message: "Refresh token không hợp lệ" })
-  @IsNotEmpty({ message: "Refresh token là bắt buộc" })
-  refreshToken!: string;
-}
+  password: z.string().min(1, "Mật khẩu không được để trống"),
+});
 
-// DTO reset mật khẩu bằng OTP
-export class ResetPasswordRequestDto {
-  @IsEmail({}, { message: "Email không hợp lệ" })
-  email!: string;
+// Request làm mới Access Token
+export const refreshTokenSchema = z.object({
+  // Token từ bảng refresh_tokens
+  refreshToken: z.string().min(1, "Token không hợp lệ"),
+});
 
-  @IsString({ message: "OTP không hợp lệ" })
-  @IsNotEmpty({ message: "OTP là bắt buộc" })
-  otp!: string;
+// Request Đặt lại mật khẩu bằng OTP
+export const resetPasswordSchema = z.object({
+  email: z.string().email("Email không hợp lệ").toLowerCase().trim(),
 
-  @IsString({ message: "Mật khẩu không hợp lệ" })
-  @MinLength(8, { message: "Mật khẩu tối thiểu 8 ký tự" })
-  newPassword!: string;
-}
+  // Mã OTP 6 số từ bảng otps
+  otp: z
+    .string()
+    .length(6, "Mã OTP phải có đúng 6 chữ số")
+    .regex(/^\d+$/, "Mã OTP chỉ bao gồm số"),
+
+  // Mật khẩu mới cho người dùng
+  newPassword: z.string().min(8, "Mật khẩu mới phải từ 8 ký tự").max(255),
+});
+
+// Xuất các Type để sử dụng ở tầng Controller/Service
+export type RegisterRequest = z.infer<typeof registerSchema>;
+export type LoginRequest = z.infer<typeof loginSchema>;
+export type RefreshTokenRequest = z.infer<typeof refreshTokenSchema>;
+export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;

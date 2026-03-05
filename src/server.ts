@@ -1,20 +1,28 @@
-import "dotenv/config"; // Load env variables FIRST
+import "dotenv/config";
 import "reflect-metadata";
-import express, { Request, Response } from "express";
-import clientRoute from "@/api/v1/routes/index.route";
-import app from "@/app";
-import { globalErrorHandler } from "@/middleware/errorHandler";
 
-// constant .
+import app from "@/app";
+import clientRoute from "@/api/v1/routes/index.route";
+import { globalErrorHandler } from "@/middleware/errorHandler";
+import cookieParser from "cookie-parser";
+import express from "express";
+
 const PORT = process.env.PORT || 8000;
 
-// router .
+// Body parser
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// Cookie parser
+app.use(cookieParser());
+
+// Routes
 clientRoute(app);
 
-// global error .
+// Global Error Handler
 app.use(globalErrorHandler);
 
-// Khởi động máy chủ
+// Start server
 app.listen(PORT, () => {
-  console.log(`⚡️ [server]: Máy chủ đang chạy tại http://localhost:${PORT}`);
+  console.log(`⚡ Server running at http://localhost:${PORT}`);
 });

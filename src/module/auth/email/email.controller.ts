@@ -1,5 +1,5 @@
 import { emailService } from "@/config/container";
-import { IEmailData } from "@/interface/email.interface";
+import { IEmailData } from "@/module/auth/email/email.type";
 import asyncHandler from "@/utils/asyncHandler";
 import { Request, Response } from "express";
 

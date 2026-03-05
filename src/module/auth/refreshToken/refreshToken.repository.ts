@@ -1,42 +1,61 @@
-import RefreshTokenModel from "@/models/refreshToken.model";
+import { PrismaClient, RefreshToken } from "@prisma/client";
 
 export interface IRefreshTokenRepository {
-  create(data: any): Promise<any>;
-  findValid(token: string): Promise<any>;
-  revoke(token: string): Promise<any>;
-  revokeAllByUser(userId: string): Promise<any>;
+  createOrUpdate(data: any): Promise<RefreshToken>;
+  findValid(token: string): Promise<RefreshToken | null>;
+  revoke(token: string): Promise<void>;
+  revokeAllByUser(userId: string): Promise<void>;
 }
 
 export class RefreshTokenRepository implements IRefreshTokenRepository {
-  // Tạo hoặc cập nhật refresh token
-  async create(data: any) {
-    return RefreshTokenModel.findOneAndUpdate(
-      { userId: data.userId },
-      {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  // Tạo mới hoặc cập nhật lại Token cho User
+  async createOrUpdate(data: any): Promise<RefreshToken> {
+    const userId = BigInt(data.userId);
+
+    // Xóa token cũ rồi tạo token mới (tối ưu hơn upsert vì userId không unique)
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId: userId },
+    });
+
+    return this.prisma.refreshToken.create({
+      data: {
+        userId: userId,
         token: data.token,
         expiresAt: data.expiresAt,
         revoked: false,
       },
-      {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true,
-      }
-    );
+    });
   }
 
-  // Tìm refresh token hợp lệ
-  async findValid(token: string) {
-    return RefreshTokenModel.findOne({ token, revoked: false });
+  // Tìm kiếm token chưa bị thu hồi và còn hạn dùng
+  async findValid(token: string): Promise<RefreshToken | null> {
+    return this.prisma.refreshToken.findFirst({
+      where: {
+        token,
+        revoked: false,
+        expiresAt: {
+          gt: new Date(), // Phải lớn hơn thời gian hiện tại
+        },
+      },
+      include: { user: true }, // Join lấy luôn thông tin user
+    });
   }
 
-  // Thu hồi refresh token
-  async revoke(token: string) {
-    return RefreshTokenModel.updateOne({ token }, { revoked: true });
+  // Thu hồi một token cụ thể (đăng xuất)
+  async revoke(token: string): Promise<void> {
+    await this.prisma.refreshToken.update({
+      where: { token },
+      data: { revoked: true },
+    });
   }
 
-  // Thu hồi tất cả token của user
-  async revokeAllByUser(userId: string) {
-    return RefreshTokenModel.updateMany({ userId }, { revoked: true });
+  // Thu hồi toàn bộ phiên đăng nhập của user (đổi mật khẩu/bảo mật)
+  async revokeAllByUser(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId: BigInt(userId) },
+      data: { revoked: true },
+    });
   }
 }

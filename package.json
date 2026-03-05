@@ -18,6 +18,7 @@
     "@types/swagger-ui-express": "^4.1.8",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.8.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "crypt": "^0.0.2",
     "crypto": "^1.0.1",
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.5",

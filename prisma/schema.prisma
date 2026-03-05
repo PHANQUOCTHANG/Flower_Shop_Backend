@@ -62,6 +62,9 @@ model User {
   /// Chỉ mục (Indexes) để tối ưu truy vấn
   @@index([deletedAt])
   @@index([provider, providerId])
+
+  // relation 
+  refreshTokens RefreshToken[]
   
   /// Ánh xạ tên bảng trong Database là số nhiều và viết thường
   @@map("users")
@@ -69,19 +72,51 @@ model User {
 
 
 // RefreshToken 
-// model RefreshToken {
-//   id        BigInt   @id @default(autoincrement())
-//   token     String   @unique @db.VarChar(255)
-//   userId    BigInt   @unique @map("user_id") // Mỗi user duy nhất 1 token để tránh rác DB
-//   revoked   Boolean  @default(false)
-//   expiresAt DateTime @map("expires_at") @db.Timestamptz
-//   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+model RefreshToken {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt   @map("user_id")
+  token     String   @unique @db.Text
+  
+  // Thời điểm hết hạn của token
+  expiresAt DateTime @map("expires_at") @db.Timestamp
+  
+  // Trạng thái thu hồi (đăng xuất hoặc bị hack)
+  revoked   Boolean  @default(false)
 
-//   // // Quan hệ với User, tự động xóa token nếu User bị xóa vật lý
-//   // user      User     @relation(fields: [userId], references: id, onDelete: Cascade)
+  // Audit timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
 
-//   @@map("refresh_tokens")
-// }
+  // Quan hệ với bảng User
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId], name: "idx_refresh_tokens_user")
+}
+
+// otp 
+model Otp {
+  id        BigInt   @id @default(autoincrement())
+  
+  // Email dùng để gắn OTP (reset password)
+  email     String   @db.VarChar(255)
+  
+  // OTP đã được hash (không lưu OTP plain)
+  otpHash   String   @map("otp_hash") @db.Text
+  
+  // Thời điểm hết hạn OTP
+  expiresAt DateTime @map("expires_at") @db.Timestamp
+  
+  // Đánh dấu OTP đã được xác thực
+  verified  Boolean  @default(false)
+  
+  // Audit timestamps
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+
+  @@map("otps") // Map tên bảng trong DB là otps
+  @@index([email], name: "idx_otps_email") // Index để tìm kiếm nhanh theo email
+}
 
 // product 
 model Product {

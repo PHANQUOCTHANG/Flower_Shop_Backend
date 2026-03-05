@@ -4,10 +4,11 @@ import AppError from "@/utils/appError";
 import { IOtpRepository } from "@/module/auth/otp/otp.repository";
 import { IUserRepository } from "@/module/user/user.repository";
 import { emailService } from "@/config/container";
+import { OtpSentResponseDto, OtpVerifiedResponseDto } from "./otp.response";
 
 export interface IOtpService {
-  send(email: string): Promise<void>;
-  verify(email: string, otp: string): Promise<string>;
+  send(email: string): Promise<OtpSentResponseDto>;
+  verify(email: string, otp: string): Promise<OtpVerifiedResponseDto>;
 }
 
 export class OtpService implements IOtpService {
@@ -16,66 +17,63 @@ export class OtpService implements IOtpService {
     private readonly userRepo: IUserRepository,
   ) {}
 
-  // Tạo, lưu trữ mã OTP và gửi qua email
-  async send(email: string): Promise<void> {
-    // 1. Kiểm tra email người dùng
+  // Tạo, lưu trữ OTP và gửi qua email cho người dùng
+  async send(email: string): Promise<OtpSentResponseDto> {
+    // 1. Kiểm tra tài khoản có tồn tại để tránh gửi mail rác
     const user = await this.userRepo.findByEmail(email);
     if (!user) throw new AppError("Email không tồn tại trên hệ thống.", 404);
 
-    // 2. Tạo mã 6 số ngẫu nhiên và mã hóa
+    // 2. Tạo mã 6 số ngẫu nhiên và băm mật mã để lưu trữ bảo mật
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // Hiệu lực trong 5 phút
 
-    // 3. Dọn dẹp các mã cũ của email này để tránh xung đột
+    // 3. Dọn dẹp tất cả các mã cũ của email này trước khi tạo mới
     await this.otpRepo.deleteByEmail(email);
 
-    // 4. Lưu mã mới vào database với thời hạn 5 phút
+    // 4. Ghi nhận mã OTP mới vào cơ sở dữ liệu
     await this.otpRepo.create({
       email,
       otpHash,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
-      verified: false,
+      expiresAt,
     });
 
-    // 5. Gửi email (Nếu lỗi thì xóa bản ghi OTP vừa tạo để rollback)
+    // 5. Gửi email thực tế (Hủy OTP trong DB nếu nhà cung cấp email lỗi)
     try {
       await emailService.sendOtp(email, otp);
+      return new OtpSentResponseDto(expiresAt);
     } catch (error) {
       await this.otpRepo.deleteByEmail(email);
-      throw error;
+      throw new AppError("Không thể gửi email OTP, vui lòng thử lại sau.", 500);
     }
   }
 
-  // So khớp mã OTP người dùng nhập vào và trả về reset token
-  async verify(email: string, otp: string): Promise<string> {
-    // 1. Tìm bản ghi OTP hợp lệ (chưa hết hạn)
+  // Xác thực mã OTP và cấp mã Token tạm thời để đặt lại mật khẩu
+  async verify(email: string, otp: string): Promise<OtpVerifiedResponseDto> {
+    // 1. Truy vấn mã OTP mới nhất và còn hạn sử dụng
     const record = await this.otpRepo.findValidByEmail(email);
-    if (!record)
+    if (!record) {
       throw new AppError("Mã OTP đã hết hạn hoặc không tồn tại.", 400);
+    }
 
-    // 2. Kiểm tra xem mã đã được dùng chưa
-    if (record.verified) throw new AppError("Mã OTP này đã được sử dụng.", 400);
-
-    // 3. So sánh mã hash
+    // 2. Kiểm tra tính chính xác của mã OTP người dùng nhập vào
     const isValid = await bcrypt.compare(otp, record.otpHash);
     if (!isValid) throw new AppError("Mã OTP không chính xác.", 400);
 
-    // 4. Đánh dấu mã đã sử dụng thành công
-    await this.otpRepo.markVerified(record.id);
+    // 3. Đánh dấu mã đã xác thực để không thể tái sử dụng (id kiểu BigInt)
+    await this.otpRepo.markVerified(record.id.toString());
 
-    // 5. Kiểm tra email tồn tại
+    // 4. Lấy thông tin user hiện tại để đưa vào Token
     const user = await this.userRepo.findByEmail(email);
-    if (!user) throw new AppError("Người dùng không tồn tại", 404);
+    if (!user) throw new AppError("Người dùng không còn tồn tại.", 404);
 
-    // 6. Tạo reset password token
+    // 5. Tạo Reset Token (JWT) có thời hạn ngắn để thực hiện bước đổi pass
     const resetSecret = process.env.JWT_RESET_SECRET;
-    if (!resetSecret) {
-      throw new AppError("Lỗi cấu hình hệ thống: JWT Secret", 500);
-    }
+    if (!resetSecret) throw new AppError("Lỗi cấu hình bảo mật hệ thống.", 500);
 
     const resetToken = jwt.sign(
       {
-        sub: user.id,
+        sub: user.id.toString(), // Chuyển BigInt sang string cho JWT
         email: user.email,
         scope: "reset_password",
       },
@@ -83,6 +81,6 @@ export class OtpService implements IOtpService {
       { expiresIn: "15m" },
     );
 
-    return resetToken;
+    return new OtpVerifiedResponseDto(resetToken);
   }
 }

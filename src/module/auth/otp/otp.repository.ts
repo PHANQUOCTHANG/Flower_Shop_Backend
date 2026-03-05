@@ -1,31 +1,55 @@
-import { IOtp, IOtpDocument } from "@/interface/otp.interface";
-import Otp from "@/models/otp.model";
+import { PrismaClient, Otp } from "@prisma/client";
 
 export interface IOtpRepository {
-  create(data: Partial<IOtp>): Promise<IOtpDocument>;
-  findValidByEmail(email: string): Promise<IOtpDocument | null>;
+  create(data: any): Promise<Otp>;
+  findValidByEmail(email: string): Promise<Otp | null>;
   markVerified(id: string): Promise<void>;
   deleteByEmail(email: string): Promise<void>;
 }
 
 export class OtpRepository implements IOtpRepository {
-  // Tạo OTP mới
-  async create(data: Partial<IOtp>): Promise<IOtpDocument> {
-    return Otp.create(data);
+  constructor(private readonly prisma: PrismaClient) {}
+
+  // Lưu mã OTP mới vào database
+  async create(data: any): Promise<Otp> {
+    return this.prisma.otp.create({
+      data: {
+        email: data.email,
+        otpHash: data.otpHash,
+        expiresAt: data.expiresAt,
+      },
+    });
   }
 
-  // Tìm OTP còn hiệu lực
-  async findValidByEmail(email: string): Promise<IOtpDocument | null> {
-    return Otp.findOne({ email });
+  // Tìm kiếm mã OTP hợp lệ: chưa dùng, đúng email và còn trong thời gian hiệu lực
+  async findValidByEmail(email: string): Promise<Otp | null> {
+    return this.prisma.otp.findFirst({
+      where: {
+        email,
+        expiresAt: {
+          gt: new Date(), // Phải lớn hơn thời gian hiện tại (gt: greater than)
+        },
+      },
+      // Ưu tiên lấy bản ghi mới nhất nếu có nhiều mã trùng lặp
+      orderBy: { createdAt: "desc" },
+    });
   }
 
-  // Đánh dấu OTP đã xác thực
+  // Cập nhật trạng thái đã xác thực (verified = true) cho mã OTP
   async markVerified(id: string): Promise<void> {
-    await Otp.findByIdAndUpdate(id, { verified: true });
+    await this.prisma.otp.update({
+      where: {
+        // Ép kiểu string sang BigInt để khớp với Primary Key trong schema
+        id: BigInt(id),
+      },
+      data: { verified: true },
+    });
   }
 
-  // Xóa OTP cũ của email
+  // Xóa sạch các mã OTP cũ hoặc đã hết hạn của một email để tối ưu dung lượng DB
   async deleteByEmail(email: string): Promise<void> {
-    await Otp.deleteMany({ email });
+    await this.prisma.otp.deleteMany({
+      where: { email },
+    });
   }
 }

@@ -1,4 +1,9 @@
 import prisma from "@/lib/prisma";
+import { AuthService, IAuthService } from "@/module/auth/auth.service";
+import { EmailService, IEmailService } from "@/module/auth/email/email.service";
+import { IOtpRepository, OtpRepository } from "@/module/auth/otp/otp.repository";
+import { IOtpService, OtpService } from "@/module/auth/otp/otp.service";
+import { IRefreshTokenRepository, RefreshTokenRepository } from "@/module/auth/refreshToken/refreshToken.repository";
 import {
   CategoryRepository,
   ICategoryRepository,
@@ -23,3 +28,25 @@ export const productService = new ProductService(productRepository);
 // Category
 const categoryRepository: ICategoryRepository = new CategoryRepository(prisma);
 export const categoryService = new CategoryService(categoryRepository);
+
+// Email 
+export const emailService: IEmailService = new EmailService();
+
+// Otp
+const otpRepository : IOtpRepository = new OtpRepository(prisma);
+export const otpService: IOtpService = new OtpService(
+  otpRepository,
+  userRepository,
+);
+
+// Refresh Token 
+const refreshTokenRepository: IRefreshTokenRepository =
+  new RefreshTokenRepository(prisma);
+
+// Auth 
+export const authService: IAuthService = new AuthService(
+  userRepository,
+  refreshTokenRepository,
+  otpRepository,
+);
+

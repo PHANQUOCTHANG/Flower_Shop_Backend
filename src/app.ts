@@ -2,8 +2,7 @@
 import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
 
-// Import Global Error Handler (Giả định file này có 4 tham số: err, req, res, next)
-import { globalErrorHandler } from "./middleware/errorHandler";
+
 
 const app: Application = express();
 
@@ -16,11 +15,5 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// 2. Body Parser & Limit
-app.use(express.json({ limit: "10kb" })); // Tối ưu: Giới hạn kích thước body JSON
-app.use(express.urlencoded({ extended: true, limit: "10kb" }));
-
-// 4. Xử lý Lỗi (Global Error Handling - Phải là middleware cuối cùng)
-// app.use(globalErrorHandler);
 
 export default app;
