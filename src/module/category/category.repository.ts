@@ -4,10 +4,13 @@ import { BaseQuery, IPaginatedResult } from "@/utils/query";
 export interface ICategoryRepository {
   create(data: Prisma.CategoryCreateInput): Promise<Category>;
   findAll(query: BaseQuery): Promise<IPaginatedResult<Category>>;
-  findById(id: bigint): Promise<Category | null>;
+  findById(id: string): Promise<Category | null>;
   findBySlug(slug: string): Promise<Category | null>;
-  updateById(id: bigint, data: Prisma.CategoryUpdateInput): Promise<Category | null>;
-  softDelete(id: bigint): Promise<void>;
+  updateById(
+    id: string,
+    data: Prisma.CategoryUpdateInput,
+  ): Promise<Category | null>;
+  softDelete(id: string): Promise<void>;
 }
 
 export class CategoryRepository implements ICategoryRepository {
@@ -32,7 +35,9 @@ export class CategoryRepository implements ICategoryRepository {
 
     const [data, total] = await Promise.all([
       this.prisma.category.findMany({
-        where, skip: (page - 1) * limit, take: limit,
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
         orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       }),
       this.prisma.category.count({ where }),
@@ -41,7 +46,7 @@ export class CategoryRepository implements ICategoryRepository {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findById(id: bigint) {
+  async findById(id: string) {
     return this.prisma.category.findFirst({ where: { id, deletedAt: null } });
   }
 
@@ -49,12 +54,12 @@ export class CategoryRepository implements ICategoryRepository {
     return this.prisma.category.findFirst({ where: { slug, deletedAt: null } });
   }
 
-  async updateById(id: bigint, data: Prisma.CategoryUpdateInput) {
+  async updateById(id: string, data: Prisma.CategoryUpdateInput) {
     return this.prisma.category.update({ where: { id }, data });
   }
 
   // Xóa mềm
-  async softDelete(id: bigint) {
+  async softDelete(id: string) {
     await this.prisma.category.update({
       where: { id },
       data: { deletedAt: new Date(), status: "hidden" },

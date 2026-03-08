@@ -29,6 +29,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
 // POST | /api/auth/login
 export const login = asyncHandler(async (req: Request, res: Response) => {
+  console.log("login", req.body) ;
   const result = await authService.login(req.body);
 
   // Lưu refresh token
@@ -45,6 +46,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
 // POST | /api/auth/refresh
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
+  console.log("refresh", req.cookies);
   const refreshToken = req.cookies?.refreshToken;
 
   if (!refreshToken) {

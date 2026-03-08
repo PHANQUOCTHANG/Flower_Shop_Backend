@@ -132,7 +132,7 @@ export class AuthService implements IAuthService {
 
     // 3. Bảo mật: Thu hồi toàn bộ token cũ và xóa OTP đã dùng
     await Promise.all([
-      this.refreshRepo.revokeAllByUser(user.id.toString()),
+      this.refreshRepo.revokeAllByUser(user.id),
       this.otpRepo.deleteByEmail(dto.email),
     ]);
 

@@ -4,11 +4,11 @@ import { BaseQuery, IPaginatedResult } from "@/utils/query";
 export interface IUserRepository {
   create(data: Prisma.UserCreateInput): Promise<User>;
   findAll(query: BaseQuery): Promise<IPaginatedResult<User>>;
-  findById(id: bigint): Promise<User | null>;
+  findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
-  updateById(id: bigint, data: Prisma.UserUpdateInput): Promise<User | null>;
+  updateById(id: string, data: Prisma.UserUpdateInput): Promise<User | null>;
   updateByEmail(email: string, data: any): Promise<User | null>;
-  softDelete(id: bigint): Promise<void>;
+  softDelete(id: string): Promise<void>;
 }
 
 export class UserRepository implements IUserRepository {
@@ -58,7 +58,7 @@ export class UserRepository implements IUserRepository {
     };
   }
 
-  async findById(id: bigint) {
+  async findById(id: string) {
     return this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
@@ -70,7 +70,7 @@ export class UserRepository implements IUserRepository {
     });
   }
 
-  async updateById(id: bigint, data: Prisma.UserUpdateInput) {
+  async updateById(id: string, data: Prisma.UserUpdateInput) {
     try {
       return await this.prisma.user.update({ where: { id }, data });
     } catch (error: any) {
@@ -88,9 +88,9 @@ export class UserRepository implements IUserRepository {
   }
 
   // Soft delete
-  async softDelete(id: bigint) {
-    await this.prisma.user.updateMany({
-      where: { id, deletedAt: null },
+  async softDelete(id: string) {
+    await this.prisma.user.update({
+      where: { id },
       data: {
         deletedAt: new Date(),
         isActive: false,

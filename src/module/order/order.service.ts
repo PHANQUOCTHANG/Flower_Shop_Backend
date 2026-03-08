@@ -1,8 +1,8 @@
 import AppError from "@/utils/appError";
-import { IOrderRepository } from "@/repositories/order.repository";
-import { ICartRepository } from "@/repositories/cart.repository";
+import { IOrderRepository } from "@/module/order/order.repository";
+import { ICartRepository } from "@/module/cart/cart.repository";
 import { IProductRepository } from "@/module/product/product.repository";
-import { CreateOrderRequestDto } from "@/dto/request/order.request";
+import { CreateOrderRequestDto } from "@/module/order/order.request";
 import { EOrderStatus } from "@/interface/order.interface";
 import { normalizeQuery } from "@/utils/query";
 

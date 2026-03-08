@@ -11,7 +11,7 @@ export class ProductResponseDto {
   slug: string;
   price: number;
   comparePrice: number | null;
-  sku : string | null ;
+  sku: string | null;
   stockQuantity: number;
   thumbnailUrl: string | null;
   status: string;
@@ -27,7 +27,7 @@ export class ProductResponseDto {
       categories?: (ProductCategory & { category?: Category })[];
     },
   ) {
-    this.id = product.id.toString(); // BigInt -> String
+    this.id = product.id;
     this.name = product.name;
     this.slug = product.slug;
     this.price = Number(product.price); // Decimal -> Number
@@ -42,7 +42,7 @@ export class ProductResponseDto {
     // Map danh sách ảnh
     this.images =
       product.images?.map((img: ProductImage) => ({
-        id: img.id.toString(),
+        id: img.id,
         url: img.imageUrl,
         isPrimary: img.isPrimary,
       })) || [];
@@ -51,7 +51,7 @@ export class ProductResponseDto {
     this.categories =
       product.categories?.map(
         (c: ProductCategory & { category?: Category }) => ({
-          id: c.categoryId.toString(),
+          id: c.categoryId,
           name: c.category?.name || "",
           slug: c.category?.slug || "",
         }),

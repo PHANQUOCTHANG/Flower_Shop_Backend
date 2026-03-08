@@ -19,7 +19,7 @@ export class AuthResponseDto {
 
     // Map dữ liệu từ bản ghi database sang định dạng response
     this.user = {
-      id: user.id.toString(), // Quan trọng: BigInt phải toString()
+      id: user.id,
       fullName: user.fullName,
       email: user.email,
       role: user.role,

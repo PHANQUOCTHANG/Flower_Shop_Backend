@@ -5,10 +5,10 @@ import { ProductQuery } from "@/module/product/product.type";
 export interface IProductRepository {
   create(data: any): Promise<Product>;
   findAll(query: ProductQuery): Promise<IPaginatedResult<Product>>;
-  findById(id: bigint): Promise<Product | null>;
+  findById(id: string): Promise<Product | null>;
   findBySlug(slug: string): Promise<Product | null>;
-  updateById(id: bigint, data: any): Promise<Product | null>;
-  softDelete(id: bigint): Promise<void>;
+  updateById(id: string, data: any): Promise<Product | null>;
+  softDelete(id: string): Promise<void>;
 }
 
 export class ProductRepository implements IProductRepository {
@@ -26,7 +26,7 @@ export class ProductRepository implements IProductRepository {
         categories: categoryIds
           ? {
               create: categoryIds.map((catId: string) => ({
-                categoryId: BigInt(catId),
+                categoryId: catId,
               })),
             }
           : undefined,
@@ -129,7 +129,7 @@ export class ProductRepository implements IProductRepository {
   }
 
   // Tìm chi tiết sản phẩm theo ID (Bao gồm tất cả ảnh và danh mục)
-  async findById(id: bigint) {
+  async findById(id: string) {
     return this.prisma.product.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -160,7 +160,7 @@ export class ProductRepository implements IProductRepository {
 
   // Cập nhật thông tin sản phẩm
   // Tự động xóa các liên kết cũ và ghi đè mới cho Categories/Images
-  async updateById(id: bigint, data: any) {
+  async updateById(id: string, data: any) {
     const { categoryIds, images, ...productData } = data;
 
     try {
@@ -173,7 +173,7 @@ export class ProductRepository implements IProductRepository {
             ? {
                 deleteMany: {},
                 create: categoryIds.map((catId: string) => ({
-                  categoryId: BigInt(catId),
+                  categoryId: catId,
                 })),
               }
             : undefined,
@@ -197,7 +197,7 @@ export class ProductRepository implements IProductRepository {
   }
 
   // Xóa mềm sản phẩm bằng cách gán ngày xóa và ẩn trạng thái
-  async softDelete(id: bigint) {
+  async softDelete(id: string) {
     await this.prisma.product.update({
       where: { id },
       data: {

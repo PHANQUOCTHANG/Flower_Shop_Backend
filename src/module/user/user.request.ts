@@ -80,7 +80,7 @@ export const UpdateUserSchema = userBase
  * Validate param ID
  */
 export const IdParamSchema = z.object({
-  id: z.string().regex(/^\d+$/, "ID phải là số hợp lệ"),
+  id: z.string().uuid("ID phải là UUID hợp lệ"),
 });
 
 export type CreateUserRequestDto = z.infer<typeof CreateUserSchema>;

@@ -18,15 +18,15 @@ export class CategoryService implements ICategoryService {
   // [POST] Tạo danh mục + Tự động tạo slug
   async create(dto: CreateCategoryDto): Promise<CategoryResponseDto> {
     const slug = slugify(dto.name, { lower: true, strict: true });
-    
+
     const existed = await this.categoryRepo.findBySlug(slug);
     if (existed) throw new AppError("Danh mục này đã tồn tại", 400);
 
-    // Chuyển parentId sang BigInt nếu có
-    const createData: any = { 
-      ...dto, 
+    // Chuyển parentId sang string nếu có
+    const createData: any = {
+      ...dto,
       slug,
-      parent: dto.parentId ? { connect: { id: BigInt(dto.parentId) } } : undefined 
+      parent: dto.parentId ? { connect: { id: dto.parentId } } : undefined,
     };
     delete createData.parentId;
 
@@ -40,36 +40,36 @@ export class CategoryService implements ICategoryService {
   }
 
   async findById(id: string) {
-    const category = await this.categoryRepo.findById(BigInt(id));
+    const category = await this.categoryRepo.findById(id);
     if (!category) throw new AppError("Không tìm thấy danh mục", 404);
     return CategoryResponseDto.from(category);
   }
 
   // [PATCH] Cập nhật danh mục
   async update(id: string, dto: UpdateCategoryDto) {
-    const categoryId = BigInt(id);
-    const exists = await this.categoryRepo.findById(categoryId);
+    const exists = await this.categoryRepo.findById(id);
     if (!exists) throw new AppError("Danh mục không tồn tại", 404);
 
     const updateData: any = { ...dto };
-    if (dto.name) updateData.slug = slugify(dto.name, { lower: true, strict: true });
-    
+    if (dto.name)
+      updateData.slug = slugify(dto.name, { lower: true, strict: true });
+
     // Xử lý quan hệ parent
     if (dto.parentId) {
-      if (BigInt(dto.parentId) === categoryId) throw new AppError("Không thể chọn chính nó làm danh mục cha", 400);
-      updateData.parent = { connect: { id: BigInt(dto.parentId) } };
+      if (dto.parentId === id)
+        throw new AppError("Không thể chọn chính nó làm danh mục cha", 400);
+      updateData.parent = { connect: { id: dto.parentId } };
       delete updateData.parentId;
     }
 
-    const updated = await this.categoryRepo.updateById(categoryId, updateData);
+    const updated = await this.categoryRepo.updateById(id, updateData);
     return CategoryResponseDto.from(updated!);
   }
 
   // [DELETE] Xóa mềm
   async delete(id: string) {
-    const categoryId = BigInt(id);
-    const exists = await this.categoryRepo.findById(categoryId);
+    const exists = await this.categoryRepo.findById(id);
     if (!exists) throw new AppError("Danh mục không tồn tại", 404);
-    await this.categoryRepo.softDelete(categoryId);
+    await this.categoryRepo.softDelete(id);
   }
 }

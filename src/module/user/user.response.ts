@@ -19,7 +19,7 @@ export class UserResponseDto {
   updatedAt: string;
 
   constructor(user: User) {
-    this.id = user.id.toString(); // Convert bigint -> string
+    this.id = user.id;
     this.fullName = user.fullName;
     this.email = user.email;
     this.phone = user.phone;

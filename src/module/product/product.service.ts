@@ -49,8 +49,7 @@ export class ProductService implements IProductService {
 
   // [GET] Chi tiết sản phẩm theo ID (kèm full ảnh và danh mục)
   async findById(id: string): Promise<ProductResponseDto> {
-    const productId = BigInt(id);
-    const product = await this.productRepo.findById(productId);
+    const product = await this.productRepo.findById(id);
 
     if (!product) {
       throw new AppError("Không tìm thấy sản phẩm", 404);
@@ -71,10 +70,8 @@ export class ProductService implements IProductService {
 
   // [PATCH] Cập nhật thông tin sản phẩm
   async update(id: string, dto: UpdateProductDto): Promise<ProductResponseDto> {
-    const productId = BigInt(id);
-
     // 1. Kiểm tra sự tồn tại của sản phẩm
-    const exists = await this.productRepo.findById(productId);
+    const exists = await this.productRepo.findById(id);
     if (!exists) {
       throw new AppError("Sản phẩm không tồn tại", 404);
     }
@@ -86,7 +83,7 @@ export class ProductService implements IProductService {
     }
 
     // 3. Thực hiện cập nhật đồng bộ qua Repository
-    const updated = await this.productRepo.updateById(productId, updateData);
+    const updated = await this.productRepo.updateById(id, updateData);
     if (!updated) {
       throw new AppError("Cập nhật sản phẩm thất bại", 500);
     }
@@ -96,15 +93,13 @@ export class ProductService implements IProductService {
 
   // [DELETE] Xóa mềm sản phẩm (Soft Delete)
   async delete(id: string): Promise<void> {
-    const productId = BigInt(id);
-
     // 1. Kiểm tra sản phẩm trước khi thực hiện xóa
-    const exists = await this.productRepo.findById(productId);
+    const exists = await this.productRepo.findById(id);
     if (!exists) {
       throw new AppError("Sản phẩm không tồn tại để xóa", 404);
     }
 
     // 2. Gọi Repo để gán deletedAt và chuyển trạng thái sang hidden
-    await this.productRepo.softDelete(productId);
+    await this.productRepo.softDelete(id);
   }
 }

@@ -1,7 +1,7 @@
 import { Router } from "express";
-import * as orderCtrl from "@/controllers/order.controller";
+import * as orderCtrl from "@/module/order/order.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
-import { CreateOrderRequestDto } from "@/dto/request/order.request";
+import { CreateOrderRequestDto } from "@/module/order/order.request";
 
 const router = Router();
 
@@ -28,7 +28,7 @@ const router = Router();
 router.post(
   "/",
   validationMiddleware(CreateOrderRequestDto),
-  orderCtrl.createOrder
+  orderCtrl.createOrder,
 );
 
 /**

@@ -46,7 +46,7 @@ export class UserService implements IUserService {
 
   // Lấy chi tiết
   async findById(id: string) {
-    const user = await this.userRepo.findById(BigInt(id));
+    const user = await this.userRepo.findById(id);
     if (!user) throw new AppError("Không tìm thấy người dùng", 404);
 
     return UserResponseDto.from(user);
@@ -54,9 +54,7 @@ export class UserService implements IUserService {
 
   // Cập nhật
   async update(id: string, dto: UpdateUserRequestDto) {
-    const userId = BigInt(id);
-
-    const exists = await this.userRepo.findById(userId);
+    const exists = await this.userRepo.findById(id);
     if (!exists) throw new AppError("Người dùng không tồn tại", 404);
 
     const updateData: any = { ...dto };
@@ -65,7 +63,7 @@ export class UserService implements IUserService {
       updateData.password = await bcrypt.hash(dto.password, 10);
     }
 
-    const updated = await this.userRepo.updateById(userId, updateData);
+    const updated = await this.userRepo.updateById(id, updateData);
     if (!updated) throw new AppError("Cập nhật thất bại", 500);
 
     return UserResponseDto.from(updated);
@@ -73,11 +71,9 @@ export class UserService implements IUserService {
 
   // Xóa mềm
   async delete(id: string) {
-    const userId = BigInt(id);
-
-    const exists = await this.userRepo.findById(userId);
+    const exists = await this.userRepo.findById(id);
     if (!exists) throw new AppError("Người dùng không tồn tại để xóa", 404);
 
-    await this.userRepo.softDelete(userId);
+    await this.userRepo.softDelete(id);
   }
 }

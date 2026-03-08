@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,14 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- ENUMS ---
 
-// user
 enum UserRole {
   CUSTOMER
   ADMIN
   STAFF
 }
-
 
 enum AuthProvider {
   LOCAL
@@ -28,171 +21,127 @@ enum AuthProvider {
   FACEBOOK
 }
 
+// --- MODELS ---
 
 model User {
-  /// Primary Key sử dụng BigInt cho khả năng mở rộng lớn
-  id          BigInt   @id @default(autoincrement())
+  id            String       @id @default(uuid())
+  fullName      String       @map("full_name") @db.VarChar(150)
+  email         String       @unique @db.VarChar(150)
+  phone         String?      @db.VarChar(20)
+  password      String?      @db.VarChar(255)
+  provider      AuthProvider @default(LOCAL)
+  providerId    String?      @map("provider_id") @db.VarChar(255)
+  role          UserRole     @default(CUSTOMER)
+  avatar        String?      @db.Text
+  isActive      Boolean      @default(true) @map("is_active")
+  emailVerified Boolean      @default(false) @map("email_verified")
+  
+  // Timestamps đồng bộ múi giờ
+  lastLogin     DateTime?    @map("last_login") @db.Timestamptz
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt     DateTime?    @map("deleted_at") @db.Timestamptz
 
-  /// Thông tin cơ bản
-  fullName    String   @map("full_name") @db.VarChar(150)
-  email       String   @unique @db.VarChar(150)
-  phone       String?  @db.VarChar(20)
+  // Quan hệ
+  refreshTokens RefreshToken[]
+  cart          Cart?
+  orders        Order[]
 
-  /// Xác thực
-  password    String?  @db.VarChar(255)
-  provider    AuthProvider @default(LOCAL)
-  providerId  String?  @map("provider_id") @db.VarChar(255)
-
-  /// Phân quyền
-  role        UserRole @default(CUSTOMER)
-
-  /// Ảnh đại diện
-  avatar      String?  @db.Text
-
-  /// Trạng thái tài khoản
-  isActive      Boolean @default(true) @map("is_active")
-  emailVerified Boolean @default(false) @map("email_verified")
-
-  /// Theo dõi hoạt động
-  lastLogin   DateTime? @map("last_login") @db.Timestamptz
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz// 
-  deletedAt   DateTime? @map("// deleted_at") @db.Timestamptz
-
-  /// Chỉ mục (Indexes) để tối ưu truy vấn
+  @@map("users")
   @@index([deletedAt])
   @@index([provider, providerId])
-
-  // relation 
-  refreshTokens RefreshToken[]
-  
-  /// Ánh xạ tên bảng trong Database là số nhiều và viết thường
-  @@map("users")
 }
 
-
-// RefreshToken 
 model RefreshToken {
-  id        BigInt   @id @default(autoincrement())
-  userId    BigInt   @map("user_id")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
   token     String   @unique @db.Text
-  
-  // Thời điểm hết hạn của token
-  expiresAt DateTime @map("expires_at") @db.Timestamp
-  
-  // Trạng thái thu hồi (đăng xuất hoặc bị hack)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
   revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  // Audit timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
-
-  // Quan hệ với bảng User
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
-  @@index([userId], name: "idx_refresh_tokens_user")
+  @@index([userId])
 }
 
-// otp 
 model Otp {
-  id        BigInt   @id @default(autoincrement())
-  
-  // Email dùng để gắn OTP (reset password)
+  id        String   @id @default(uuid())
   email     String   @db.VarChar(255)
-  
-  // OTP đã được hash (không lưu OTP plain)
   otpHash   String   @map("otp_hash") @db.Text
-  
-  // Thời điểm hết hạn OTP
-  expiresAt DateTime @map("expires_at") @db.Timestamp
-  
-  // Đánh dấu OTP đã được xác thực
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
   verified  Boolean  @default(false)
-  
-  // Audit timestamps
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  @@map("otps") // Map tên bảng trong DB là otps
-  @@index([email], name: "idx_otps_email") // Index để tìm kiếm nhanh theo email
+  @@map("otps")
+  @@index([email])
 }
 
-// product 
+model Category {
+  id              String            @id @default(uuid())
+  name            String            @db.VarChar(150)
+  slug            String            @unique @db.VarChar(150)
+  description     String?           @db.Text
+  parentId        String?           @map("parent_id")
+  thumbnailUrl    String?           @map("thumbnail_url") @db.Text
+  sortOrder       Int               @default(0) @map("sort_order")
+  status          String            @default("active") @db.VarChar(20)
+  metaTitle       String?           @map("meta_title") @db.VarChar(255)
+  metaDescription String?           @map("meta_description") @db.Text
+  
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime?         @map("deleted_at") @db.Timestamptz
+
+  // Quan hệ cha-con (Đệ quy)
+  parent   Category?         @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[]        @relation("CategoryToCategory")
+  products ProductCategory[]
+
+  @@map("categories")
+  @@index([slug])
+  @@index([parentId])
+}
+
 model Product {
-  id                BigInt    @id @default(autoincrement())
+  id                String    @id @default(uuid())
   name              String    @db.VarChar(255)
   slug              String    @unique @db.VarChar(255)
   shortDescription  String?   @map("short_description") @db.Text
   description       String?   @db.Text
-  
-  // Tiền tệ dùng Decimal để tránh sai số float
   price             Decimal   @db.Decimal(12, 2)
   comparePrice      Decimal?  @map("compare_price") @db.Decimal(12, 2)
   costPrice         Decimal?  @map("cost_price") @db.Decimal(12, 2)
-  
   sku               String?   @unique @db.VarChar(100)
   stockQuantity     Int       @default(0) @map("stock_quantity")
   lowStockThreshold Int?      @default(5) @map("low_stock_threshold")
-  
   thumbnailUrl      String?   @map("thumbnail_url") @db.Text
   metaTitle         String?   @map("meta_title") @db.VarChar(255)
   metaDescription   String?   @map("meta_description") @db.Text
+  status            String    @default("active") @db.VarChar(20)
   
-  status            String    @default("active") @db.VarChar(20) // active | hidden | draft
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamp
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp
-  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz
 
-  // Quan hệ với bảng trung gian Categories
-  categories        ProductCategory[]
-  
-  // Quan hệ với bảng Images
-  images            ProductImage[]
+  // Quan hệ
+  categories ProductCategory[]
+  images     ProductImage[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
 
   @@map("products")
-  @@index([slug], name: "idx_products_slug")
-  @@index([status], name: "idx_products_status")
-  @@index([price], name: "idx_products_price")
-  @@index([stockQuantity], name: "idx_products_stock")
+  @@index([slug])
+  @@index([status])
+  @@index([price])
 }
 
-// Category 
-model Category {
-  id              BigInt     @id @default(autoincrement())
-  name            String     @db.VarChar(150)
-  slug            String     @unique @db.VarChar(150)
-  description     String?    @db.Text
-  
-  // Quan hệ phân cấp cha-con
-  parentId        BigInt?    @map("parent_id")
-  parent          Category?  @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: SetNull)
-  children        Category[] @relation("CategoryToCategory")
-  
-  thumbnailUrl    String?    @map("thumbnail_url") @db.Text
-  sortOrder       Int        @default(0) @map("sort_order")
-  status          String     @default("active") @db.VarChar(20) // active | hidden
-  
-  metaTitle       String?    @map("meta_title") @db.VarChar(255)
-  metaDescription String?    @map("meta_description") @db.Text
-  
-  deletedAt       DateTime?  @map("deleted_at") @db.Timestamp
-  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamp
-  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp
-
-  products ProductCategory[]
-
-  @@map("categories")
-  @@index([slug], name: "idx_categories_slug")
-  @@index([parentId], name: "idx_categories_parent")
-  @@index([status], name: "idx_categories_status")
-  @@index([sortOrder], name: "idx_categories_sort")
-}
-
-// product-category
 model ProductCategory {
-  productId  BigInt   @map("product_id")
-  categoryId BigInt   @map("category_id")
+  productId  String   @map("product_id")
+  categoryId String   @map("category_id")
   product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
@@ -200,17 +149,80 @@ model ProductCategory {
   @@map("product_categories")
 }
 
-// product-image
 model ProductImage {
-  id         BigInt   @id @default(autoincrement())
-  productId  BigInt   @map("product_id")
-  imageUrl   String   @map("image_url") @db.Text
-  isPrimary  Boolean  @default(false) @map("is_primary")
-  sortOrder  Int      @default(0) @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  imageUrl  String   @map("image_url") @db.Text
+  isPrimary Boolean  @default(false) @map("is_primary")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("product_images")
-  @@index([productId], name: "idx_product_images_product")
+  @@index([productId])
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique @map("user_id")
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String   @map("cart_id")
+  productId String   @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("cart_items")
+  @@index([cartId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String      @map("user_id")
+  totalPrice      Decimal     @map("total_price") @db.Decimal(12, 2)
+  status          String      @default("pending") @db.VarChar(20)
+  
+  // Thông tin Snapshot (Địa chỉ/SĐT tại thời điểm mua)
+  shippingAddress String?     @map("shipping_address") @db.Text
+  shippingPhone   String?     @map("shipping_phone") @db.VarChar(20)
+  paymentMethod   String?     @map("payment_method") @db.VarChar(50)
+  paymentStatus   String      @default("unpaid") @map("payment_status") @db.VarChar(20)
+
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  user  User        @relation(fields: [userId], references: [id])
+  items OrderItem[]
+
+  @@map("orders")
+  @@index([userId])
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  productId String   @map("product_id")
+  quantity  Int
+  price     Decimal  @db.Decimal(12, 2) // Giá chốt lúc mua
+  subtotal  Decimal  @db.Decimal(12, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+  @@index([orderId])
 }

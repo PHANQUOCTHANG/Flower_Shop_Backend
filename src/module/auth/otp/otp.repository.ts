@@ -38,10 +38,7 @@ export class OtpRepository implements IOtpRepository {
   // Cập nhật trạng thái đã xác thực (verified = true) cho mã OTP
   async markVerified(id: string): Promise<void> {
     await this.prisma.otp.update({
-      where: {
-        // Ép kiểu string sang BigInt để khớp với Primary Key trong schema
-        id: BigInt(id),
-      },
+      where: { id },
       data: { verified: true },
     });
   }

@@ -25,7 +25,6 @@ router.post("/login", validationMiddleware(loginSchema), authCtrl.login);
 // POST | /api/auth/refresh-token | Làm mới access token
 router.post(
   "/refresh-token",
-  validationMiddleware(refreshTokenSchema),
   authCtrl.refresh,
 );
 
@@ -36,18 +35,18 @@ router.post(
 );
 
 // POST | /api/auth/send-otp | Gửi OTP
-router.post("/send-otp", validationMiddleware(sendOtpSchema), authCtrl.sendOtp);
+router.post("/forgot-password/send-otp", validationMiddleware(sendOtpSchema), authCtrl.sendOtp);
 
 // POST | /api/auth/verify-otp | Xác thực OTP
 router.post(
-  "/verify-otp",
+  "/forgot-password/verify-otp",
   validationMiddleware(verifyOtpSchema),
   authCtrl.verifyOtp,
 );
 
 // POST | /api/auth/reset-password | Đặt lại mật khẩu
 router.post(
-  "/reset-password",
+  "/forgot-password/reset-password",
   validationMiddleware(resetPasswordSchema),
   authCtrl.resetPassword,
 );

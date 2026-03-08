@@ -4,7 +4,11 @@ import { z } from "zod";
 const categoryBase = z.object({
   name: z.string().trim().min(2, "Tên danh mục tối thiểu 2 ký tự").max(150),
   description: z.string().nullable().optional(),
-  parentId: z.string().regex(/^\d+$/, "Parent ID phải là số").nullable().optional(),
+  parentId: z
+    .string()
+    .uuid("Parent ID phải là UUID hợp lệ")
+    .nullable()
+    .optional(),
   thumbnailUrl: z.string().url("Link ảnh không hợp lệ").nullable().optional(),
   sortOrder: z.number().int().default(0),
   status: z.enum(["active", "hidden"]).default("active"),
@@ -20,7 +24,7 @@ export const UpdateCategorySchema = categoryBase.partial();
 
 // [Schema] Validate ID param
 export const CategoryIdParamSchema = z.object({
-  id: z.string().regex(/^\d+$/, "ID danh mục phải là số hợp lệ"),
+  id: z.string().uuid("ID danh mục phải là UUID hợp lệ"),
 });
 
 export type CreateCategoryDto = z.infer<typeof CreateCategorySchema>;

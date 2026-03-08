@@ -4,6 +4,8 @@ import { EmailService, IEmailService } from "@/module/auth/email/email.service";
 import { IOtpRepository, OtpRepository } from "@/module/auth/otp/otp.repository";
 import { IOtpService, OtpService } from "@/module/auth/otp/otp.service";
 import { IRefreshTokenRepository, RefreshTokenRepository } from "@/module/auth/refreshToken/refreshToken.repository";
+import { CartRepository, ICartRepository } from "@/module/cart/cart.repository";
+import { CartService, ICartService } from "@/module/cart/cart.service";
 import {
   CategoryRepository,
   ICategoryRepository,
@@ -50,3 +52,6 @@ export const authService: IAuthService = new AuthService(
   otpRepository,
 );
 
+// Cart 
+const cartRepository : ICartRepository = new CartRepository(prisma) ;
+export const cartService : ICartService = new CartService(cartRepository , productRepository) ;

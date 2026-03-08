@@ -60,8 +60,8 @@ export class OtpService implements IOtpService {
     const isValid = await bcrypt.compare(otp, record.otpHash);
     if (!isValid) throw new AppError("Mã OTP không chính xác.", 400);
 
-    // 3. Đánh dấu mã đã xác thực để không thể tái sử dụng (id kiểu BigInt)
-    await this.otpRepo.markVerified(record.id.toString());
+    // 3. Đánh dấu mã đã xác thực để không thể tái sử dụng
+    await this.otpRepo.markVerified(record.id);
 
     // 4. Lấy thông tin user hiện tại để đưa vào Token
     const user = await this.userRepo.findByEmail(email);
@@ -73,7 +73,7 @@ export class OtpService implements IOtpService {
 
     const resetToken = jwt.sign(
       {
-        sub: user.id.toString(), // Chuyển BigInt sang string cho JWT
+        sub: user.id,
         email: user.email,
         scope: "reset_password",
       },

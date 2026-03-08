@@ -12,16 +12,14 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
 
   // Tạo mới hoặc cập nhật lại Token cho User
   async createOrUpdate(data: any): Promise<RefreshToken> {
-    const userId = BigInt(data.userId);
-
     // Xóa token cũ rồi tạo token mới (tối ưu hơn upsert vì userId không unique)
     await this.prisma.refreshToken.deleteMany({
-      where: { userId: userId },
+      where: { userId: data.userId },
     });
 
     return this.prisma.refreshToken.create({
       data: {
-        userId: userId,
+        userId: data.userId,
         token: data.token,
         expiresAt: data.expiresAt,
         revoked: false,
@@ -45,7 +43,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
 
   // Thu hồi một token cụ thể (đăng xuất)
   async revoke(token: string): Promise<void> {
-    await this.prisma.refreshToken.update({
+    await this.prisma.refreshToken.updateMany({
       where: { token },
       data: { revoked: true },
     });
@@ -54,7 +52,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
   // Thu hồi toàn bộ phiên đăng nhập của user (đổi mật khẩu/bảo mật)
   async revokeAllByUser(userId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
-      where: { userId: BigInt(userId) },
+      where: { userId },
       data: { revoked: true },
     });
   }
