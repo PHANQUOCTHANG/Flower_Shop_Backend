@@ -47,6 +47,11 @@ model User {
   cart          Cart?
   orders        Order[]
 
+  // Thêm quan hệ cho Chat
+  chats      Chat[]    @relation("UserChats")
+  adminChats Chat[]    @relation("AdminChats")
+  messages   Message[]
+
   @@map("users")
   @@index([deletedAt])
   @@index([provider, providerId])
@@ -225,4 +230,43 @@ model OrderItem {
 
   @@map("order_items")
   @@index([orderId])
+}
+
+// Chat
+model Chat {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id")
+  adminId       String?   @map("admin_id")
+  status        String    @default("open") @db.VarChar(20)
+  lastMessageAt DateTime? @map("last_message_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Quan hệ với bảng User (Giả định bảng User dùng id kiểu String)
+  user          User      @relation("UserChats", fields: [userId], references: [id])
+  admin         User?     @relation("AdminChats", fields: [adminId], references: [id])
+  
+  // Quan hệ với bảng Messages
+  messages      Message[]
+
+  @@map("chats")
+  @@index([userId])
+  @@index([adminId])
+  @@index([status])
+}
+
+model Message {
+  id         String   @id @default(uuid()) @db.Uuid
+  chatId     String   @map("chat_id") @db.Uuid
+  senderId   String   @map("sender_id")
+  senderRole String   @map("sender_role") @db.VarChar(10)
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Quan hệ
+  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender     User     @relation(fields: [senderId], references: [id])
+
+  @@map("messages")
+  @@index([chatId])
 }

@@ -1,119 +1,124 @@
 import AppError from "@/utils/appError";
-import { IOrderRepository } from "@/module/order/order.repository";
-import { ICartRepository } from "@/module/cart/cart.repository";
-import { IProductRepository } from "@/module/product/product.repository";
-import { CreateOrderRequestDto } from "@/module/order/order.request";
-import { EOrderStatus } from "@/interface/order.interface";
-import { normalizeQuery } from "@/utils/query";
+import { IOrderRepository } from "./order.repository";
+import { ICartRepository } from "../cart/cart.repository";
+import { OrderResponseDto } from "./order.response";
+import { CheckoutDto } from "@/module/order/order.request";
 
 export interface IOrderService {
-  create(userId: string, dto: CreateOrderRequestDto): Promise<any>;
-  findAll(userId: string, query: any): Promise<any>;
-  findById(orderId: string, userId: string): Promise<any>;
+  checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
+  findAll(query: any): Promise<any>;
+  findByUserId(userId: string, query: any): Promise<any>;
+  findById(orderId: string, userId: string): Promise<OrderResponseDto>;
+  updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
 }
 
 export class OrderService implements IOrderService {
   constructor(
     private readonly orderRepo: IOrderRepository,
-    private readonly cartRepo: ICartRepository,
-    private readonly productRepo: IProductRepository,
+    private readonly cartRepo: ICartRepository
   ) {}
 
-  // Quy trình đặt hàng: Validate giỏ hàng -> Check kho -> Snapshot -> Trừ kho -> Xóa giỏ
-  async create(userId: string, dto: CreateOrderRequestDto): Promise<any> {
-    // Lấy giỏ hàng hiện tại (Populate sản phẩm để lấy giá và tồn kho mới nhất)
+  /**
+   * Quy trình đặt hàng: Validate giỏ hàng -> Check kho -> Chốt giá -> Create Order & Trừ kho -> Clear Cart
+   */
+  async checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
+    // 1. Lấy giỏ hàng hiện tại của User
     const cart = await this.cartRepo.findByUserId(userId);
-    if (!cart || cart.products.length === 0) {
+    if (!cart || cart.items.length === 0) {
       throw new AppError("Giỏ hàng của bạn đang trống", 400);
     }
 
-    let totalAmount = 0;
+    let totalPrice = 0;
     const orderItems = [];
 
-    // Duyệt sản phẩm để tính giá và kiểm tra tồn kho
-    for (const item of cart.products) {
-      const product = item.productId as any;
+    // 2. Duyệt sản phẩm để tính giá và kiểm tra tồn kho (Snapshot)
+    for (const item of cart.items) {
+      const product = item.product;
 
-      if (product.quantity < item.quantity) {
+      // Kiểm tra tồn kho
+      if (product.stockQuantity < item.quantity) {
         throw new AppError(
-          `Sản phẩm ${product.name} không đủ số lượng tồn kho`,
-          400,
+          `Sản phẩm "${product.name}" không đủ số lượng tồn kho (Còn: ${product.stockQuantity})`,
+          400
         );
       }
 
-      const subTotal = product.price * item.quantity;
-      totalAmount += subTotal;
+      const itemPrice = Number(product.price);
+      const subtotal = itemPrice * item.quantity;
+      totalPrice += subtotal;
 
-      // Lưu Snapshot thông tin tại thời điểm mua (Giá và tên không đổi kể cả khi shop cập nhật Product)
+      // Chuẩn bị dữ liệu Item để lưu vào Order (Snapshot giá tại thời điểm mua)
       orderItems.push({
-        productId: product._id,
-        productName: product.name,
-        size: item.size,
-        color: item.color,
-        price: product.price,
+        productId: product.id,
         quantity: item.quantity,
-        totalPrice: subTotal,
+        price: itemPrice,
+        subtotal: subtotal,
       });
     }
 
-    // Khởi tạo bản ghi đơn hàng
-    const order = await this.orderRepo.create({
-      orderCode: `ORD-${Date.now()}`,
+    // 3. Gọi Repo thực hiện Transaction: Tạo Order + OrderItems + Trừ kho Product
+    // Vì Repo đã dùng $transaction, nên nếu trừ kho lỗi thì Order sẽ không được tạo
+    const order = await this.orderRepo.createOrder({
       userId,
-      items: orderItems,
-      totalAmount,
+      totalPrice,
+      shippingAddress: dto.shippingAddress,
+      shippingPhone: dto.shippingPhone,
       paymentMethod: dto.paymentMethod,
-      status: EOrderStatus.PENDING,
+      items: orderItems,
     });
 
-    // Cập nhật giảm tồn kho an toàn (Atomic update)
-    for (const item of orderItems) {
-      await this.productRepo.updateById(item.productId.toString(), {
-        $inc: { quantity: -item.quantity },
-      });
-    }
+    // 4. Làm trống giỏ hàng sau khi đặt thành công
+    await this.cartRepo.clearCart(cart.id);
 
-    // Làm trống giỏ hàng sau khi đặt thành công
-    await this.cartRepo.clear(userId);
-
-    return this.mapToResponse(order);
+    return OrderResponseDto.from(order);
   }
 
-  // Lấy danh sách đơn hàng của người dùng hiện tại
-  async findAll(userId: string, query: any): Promise<any> {
-    const normalizedQuery = normalizeQuery(query);
-    const result = await this.orderRepo.findAll(normalizedQuery, { userId });
-
+  /**
+   * Lấy danh sách đơn hàng của người dùng (Customer)
+   */
+  async findByUserId(userId: string, query: any): Promise<any> {
+    const result = await this.orderRepo.findByUserId(userId, query);
+    
     return {
       ...result,
-      data: result.data.map((order: any) => this.mapToResponse(order)),
+      data: OrderResponseDto.fromList(result.data),
     };
   }
 
-  // Xem chi tiết đơn hàng (kèm bảo mật userId)
-  async findById(orderId: string, userId: string): Promise<any> {
+  /**
+   * Xem chi tiết đơn hàng (kèm bảo mật userId)
+   */
+  async findById(orderId: string, userId: string): Promise<OrderResponseDto> {
     const order = await this.orderRepo.findById(orderId);
 
-    // Đảm bảo người dùng chỉ có thể xem đơn hàng của chính mình
-    if (!order || order.userId.toString() !== userId) {
+    // Đảm bảo đơn hàng tồn tại và thuộc về chính User đó (trừ ADMIN)
+    if (!order || order.userId !== userId) {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
-    return this.mapToResponse(order);
+    return new OrderResponseDto(order);
   }
 
-  // Chuyển đổi sang định dạng Response sạch
-  private mapToResponse(order: any): any {
+  /**
+   * ADMIN: Lấy tất cả đơn hàng hệ thống
+   */
+  async findAll(query: any): Promise<any> {
+    const result = await this.orderRepo.findAll(query);
+    
     return {
-      id: order._id || order.id,
-      orderCode: order.orderCode,
-      userId: order.userId,
-      items: order.items,
-      totalAmount: order.totalAmount,
-      paymentMethod: order.paymentMethod,
-      status: order.status,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt,
+      ...result,
+      data: OrderResponseDto.fromList(result.data),
     };
+  }
+
+  /**
+   * (ADMIN) : Cập nhật trạng thái đơn hàng
+   */
+  async updateStatus(orderId: string, status: string): Promise<OrderResponseDto> {
+    const order = await this.orderRepo.updateStatus(orderId, status);
+    if (!order) {
+      throw new AppError("Không tìm thấy đơn hàng để cập nhật", 404);
+    }
+    return OrderResponseDto.from(order);
   }
 }
