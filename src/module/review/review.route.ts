@@ -1,7 +1,7 @@
 import { Router } from "express";
-import * as reviewCtrl from "@/controllers/review.controller";
+import * as reviewCtrl from "@/module/review/review.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
-import { CreateReviewRequestDto } from "@/dto/request/review.request";
+import { CreateReviewRequestDto } from "@/module/review/review.request";
 
 const router = Router();
 
@@ -28,7 +28,7 @@ const router = Router();
 router.post(
   "/",
   validationMiddleware(CreateReviewRequestDto),
-  reviewCtrl.createReview
+  reviewCtrl.createReview,
 );
 
 /**

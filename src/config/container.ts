@@ -11,6 +11,8 @@ import {
   ICategoryRepository,
 } from "@/module/category/category.repository";
 import { CategoryService } from "@/module/category/category.service";
+import { IOrderRepository, OrderRepository } from "@/module/order/order.repository";
+import { IOrderService, OrderService } from "@/module/order/order.service";
 import {
   IProductRepository,
   ProductRepository,
@@ -55,3 +57,7 @@ export const authService: IAuthService = new AuthService(
 // Cart 
 const cartRepository : ICartRepository = new CartRepository(prisma) ;
 export const cartService : ICartService = new CartService(cartRepository , productRepository) ;
+
+// Order 
+const orderRepository : IOrderRepository = new OrderRepository(prisma) ;
+export const orderService : IOrderService = new OrderService(orderRepository , cartRepository) ;

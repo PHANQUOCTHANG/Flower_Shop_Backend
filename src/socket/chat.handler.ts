@@ -1,4 +1,4 @@
-// socket/chat.handler.ts
+// socket/chat.handler.ts  
 import Chat from "@/models/chat.model"; // Giả định alias và Model Chat
 import { IChatDocument, IMessageData } from "@/interface/chat.interface";
 import { Server, Socket } from "socket.io";

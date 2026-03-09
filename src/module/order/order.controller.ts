@@ -1,36 +1,50 @@
-import { orderService } from "@/config/container";
-import asyncHandler from "@/utils/asyncHandler";
 import { Request, Response } from "express";
+import { orderService } from "@/config/container";
+import { ApiResponse } from "@/utils/apiResponse";
+import { normalizeQuery } from "@/utils/query";
+import asyncHandler from "@/utils/asyncHandler";
 
-// POST | /api/v1/orders | Tạo đơn hàng mới từ giỏ hàng
-export const createOrder = asyncHandler(async (req: any, res: Response) => {
-  // Truyền userId từ middleware xác thực và dữ liệu body (phương thức thanh toán...)
-  const data = await orderService.create(req.user.id, req.body);
+// [POST] /api/v1/orders/checkout - Khách hàng đặt hàng
+export const checkout = asyncHandler(async (req: Request, res: Response) => {
+  // req.user.id lấy từ AuthMiddleware
+  const data = await orderService.checkout(req.user.id, req.body);
   
-  res.status(201).json({ 
-    status: "success", 
-    data 
-  });
+  return res
+    .status(201)
+    .json(ApiResponse.success(data, "Đặt hàng thành công"));
 });
 
-// GET | /api/v1/orders/my-orders | Lấy danh sách đơn hàng của người dùng hiện tại
-export const getMyOrders = asyncHandler(async (req: any, res: Response) => {
-  // Gọi hàm findAll trong service đã được refactor ngắn gọn
-  const data = await orderService.findAll(req.user.id, req.query as any);
+// [GET] /api/v1/orders/me - Khách hàng xem lịch sử đơn hàng của mình
+export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
+  const query = normalizeQuery(req.query);
+  const result = await orderService.findByUserId(req.user.id, query);
   
-  res.status(200).json({ 
-    status: "success", 
-    data 
-  });
+  return res.status(200).json(ApiResponse.paginate(result));
 });
 
-// GET | /api/v1/orders/:id | Xem chi tiết một đơn hàng cụ thể
-export const getOrder = asyncHandler(async (req: any, res: Response) => {
-  // Truyền cả orderId và userId để đảm bảo tính bảo mật (chủ sở hữu mới được xem)
-  const data = await orderService.findById(req.params.id, req.user.id);
+// [GET] /api/v1/orders/:id - Chi tiết đơn hàng (Dùng cho cả khách và admin)
+export const getOrderDetail = asyncHandler(async (req: Request, res: Response) => {
+  const data = await orderService.findById(req.params.id as string, req.user.id);
   
-  res.status(200).json({ 
-    status: "success", 
-    data 
-  });
+  return res.status(200).json(ApiResponse.success(data));
+});
+
+// [GET] /api/v1/orders - Admin lấy danh sách toàn bộ đơn hàng hệ thống
+export const getAllOrders = asyncHandler(async (req: Request, res: Response) => {
+  const query = normalizeQuery(req.query);
+  const result = await orderService.findAll(query);
+  
+  return res.status(200).json(ApiResponse.paginate(result));
+});
+
+// [PATCH] /api/v1/orders/:id/status - Admin cập nhật trạng thái đơn hàng
+export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+  const data = await orderService.updateStatus(
+    req.params.id as string, 
+    req.body.status
+  );
+  
+  return res
+    .status(200)
+    .json(ApiResponse.success(data, "Cập nhật trạng thái thành công"));
 });
