@@ -198,7 +198,7 @@ npm run serve
 Server will run at:
 
 ```
-http://localhost:8000
+http://localhost:5000
 ```
 
 ---
