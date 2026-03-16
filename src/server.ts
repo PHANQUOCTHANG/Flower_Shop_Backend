@@ -6,6 +6,7 @@ import clientRoute from "@/api/v1/routes/index.route";
 import { globalErrorHandler } from "@/middleware/errorHandler";
 import cookieParser from "cookie-parser";
 import express from "express";
+import { connectRedis } from "@/config/redis";
 
 const PORT = process.env.PORT || 8000;
 
@@ -22,7 +23,13 @@ clientRoute(app);
 // Global Error Handler
 app.use(globalErrorHandler);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`⚡ Server running at http://localhost:${PORT}`);
-});
+async function startServer() {
+  await connectRedis();
+
+  // Start server
+  app.listen(PORT, () => {
+    console.log(`⚡ Server running at http://localhost:${PORT}`);
+  });
+}
+
+startServer();

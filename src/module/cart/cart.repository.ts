@@ -23,7 +23,17 @@ export class CartRepository implements ICartRepository {
       where: { userId },
       include: {
         items: {
-          include: { product: true }, // Lấy thêm thông line sản phẩm để hiển thị
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                price: true,
+                thumbnailUrl: true,
+                stockQuantity: true, // Cần thiết để check tồn kho khi checkout
+              },
+            },
+          },
         },
       },
     });
@@ -52,12 +62,16 @@ export class CartRepository implements ICartRepository {
   }
 
   // Thêm sản phẩm vào giỏ hoặc cập nhật nếu đã tồn tại
-  async addItem(cartId: string, data: any): Promise<CartItem> {
+  async addItem(
+    cartId: string,
+    productId: string,
+    quantity: number,
+  ): Promise<CartItem> {
     return this.prisma.cartItem.create({
       data: {
         cartId,
-        productId: data.productId,
-        quantity: data.quantity,
+        productId: productId,
+        quantity: quantity,
       },
     });
   }

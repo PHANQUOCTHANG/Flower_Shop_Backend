@@ -126,6 +126,7 @@ model Product {
   thumbnailUrl      String?   @map("thumbnail_url") @db.Text
   metaTitle         String?   @map("meta_title") @db.VarChar(255)
   metaDescription   String?   @map("meta_description") @db.Text
+  metaKeywords      String? @map("meta_keywords") @db.Text
   status            String    @default("active") @db.VarChar(20)
   
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
@@ -202,10 +203,12 @@ model Order {
   status          String      @default("pending") @db.VarChar(20)
   
   // Thông tin Snapshot (Địa chỉ/SĐT tại thời điểm mua)
+  name String?                @map("name") @db.Text
   shippingAddress String?     @map("shipping_address") @db.Text
   shippingPhone   String?     @map("shipping_phone") @db.VarChar(20)
   paymentMethod   String?     @map("payment_method") @db.VarChar(50)
   paymentStatus   String      @default("unpaid") @map("payment_status") @db.VarChar(20)
+  note String?                @map("note") @db.Text
 
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz

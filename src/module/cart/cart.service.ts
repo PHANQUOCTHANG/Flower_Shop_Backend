@@ -1,8 +1,8 @@
-// Giả định bạn đã có
 import { ICartRepository } from "@/module/cart/cart.repository";
 import { IProductRepository } from "@/module/product/product.repository";
 import AppError from "@/utils/appError";
 import { Cart, CartItem } from "@prisma/client";
+import { getCache, setCache, deleteCache } from "@/utils/cache";
 
 export interface ICartService {
   getCart(userId: string): Promise<any>;
@@ -17,6 +17,9 @@ export interface ICartService {
 }
 
 export class CartService implements ICartService {
+  private readonly CACHE_KEY = "cart";
+  private readonly CACHE_TTL = 1800; // 30 phút (Giỏ hàng nên cache ngắn hơn sản phẩm)
+
   constructor(
     private readonly cartRepo: ICartRepository,
     private readonly productRepo: IProductRepository,
@@ -24,9 +27,19 @@ export class CartService implements ICartService {
 
   // Lấy chi tiết giỏ hàng của người dùng
   async getCart(userId: string): Promise<any> {
+    // [Cache] Kiểm tra giỏ hàng trong cache trước
+    const cacheKey = `${this.CACHE_KEY}:${userId}`;
+    const cachedCart = await getCache<any>(cacheKey);
+    if (cachedCart) return cachedCart;
+
     const cart = await this.cartRepo.findByUserId(userId);
-    if (!cart) return { items: [], totalAmount: 0 };
-    return cart;
+
+    const result = !cart ? { items: [], totalAmount: 0 } : cart;
+
+    // [Cache] Lưu vào redis
+    await setCache(cacheKey, result, this.CACHE_TTL);
+
+    return result;
   }
 
   // Thêm sản phẩm vào giỏ hàng (Xử lý cộng dồn số lượng)
@@ -51,8 +64,12 @@ export class CartService implements ICartService {
       await this.cartRepo.updateQuantity(existingItem.id, newQuantity);
     } else {
       // Nếu chưa có: Tạo mới CartItem với giá hiện tại của sản phẩm
+      console.log("Cart", { cartId: cart.id, productId, quantity });
       await this.cartRepo.addItem(cart.id, productId, quantity);
     }
+
+    // [Cache] Xóa cache giỏ hàng để lần sau lấy dữ liệu mới nhất
+    await deleteCache(`${this.CACHE_KEY}:${userId}`);
   }
 
   // Cập nhật số lượng trực tiếp (ví dụ: thay đổi ở input số lượng)
@@ -70,6 +87,9 @@ export class CartService implements ICartService {
     if (!item) throw new AppError("Sản phẩm không có trong giỏ hàng", 404);
 
     await this.cartRepo.updateQuantity(item.id, quantity);
+
+    // [Cache] Invalidate cache
+    await deleteCache(`${this.CACHE_KEY}:${userId}`);
   }
 
   // Xóa một sản phẩm khỏi giỏ
@@ -80,6 +100,9 @@ export class CartService implements ICartService {
     const item = await this.cartRepo.findItemInCart(cart.id, productId);
     if (item) {
       await this.cartRepo.removeItem(item.id);
+
+      // [Cache] Cập nhật lại cache sau khi xóa item
+      await deleteCache(`${this.CACHE_KEY}:${userId}`);
     }
   }
 
@@ -88,6 +111,9 @@ export class CartService implements ICartService {
     const cart = await this.cartRepo.findByUserId(userId);
     if (cart) {
       await this.cartRepo.clearCart(cart.id.toString());
+
+      // [Cache] Xóa cache hoàn toàn
+      await deleteCache(`${this.CACHE_KEY}:${userId}`);
     }
   }
 }

@@ -9,14 +9,22 @@ export class ProductResponseDto {
   id: string;
   name: string;
   slug: string;
+  shortDescription: string | null;
+  description: string | null;
   price: number;
   comparePrice: number | null;
+  costPrice: number | null;
   sku: string | null;
   stockQuantity: number;
+  lowStockThreshold: number | null;
   thumbnailUrl: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  metaKeywords: string | null ;
   status: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
 
   images: any[];
   categories: any[];
@@ -30,14 +38,24 @@ export class ProductResponseDto {
     this.id = product.id;
     this.name = product.name;
     this.slug = product.slug;
+    this.shortDescription = product.shortDescription || null;
+    this.description = product.description || null;
     this.price = Number(product.price); // Decimal -> Number
     this.comparePrice = product.comparePrice
       ? Number(product.comparePrice)
       : null;
+    this.costPrice = product.costPrice ? Number(product.costPrice) : null;
     this.sku = product.sku;
     this.stockQuantity = product.stockQuantity;
+    this.lowStockThreshold = product.lowStockThreshold || null;
     this.thumbnailUrl = product.thumbnailUrl;
+    this.metaTitle = product.metaTitle || null;
+    this.metaDescription = product.metaDescription || null;
+    this.metaKeywords = product.metaKeywords || null ;
     this.status = product.status;
+    this.createdAt = product.createdAt.toISOString();
+    this.updatedAt = product.updatedAt.toISOString();
+    this.deletedAt = product.deletedAt ? product.deletedAt.toISOString() : null;
 
     // Map danh sách ảnh
     this.images =
@@ -56,9 +74,6 @@ export class ProductResponseDto {
           slug: c.category?.slug || "",
         }),
       ) || [];
-
-    this.createdAt = product.createdAt.toISOString();
-    this.updatedAt = product.updatedAt.toISOString();
   }
 
   static from(p: Product) {

@@ -1,19 +1,35 @@
-export class CartItemResponseDto {
+export class ProductItem {
   id: string;
-  productId: string;
+  name: string;
+  price: number;
+  thumbnailUrl: string;
+  stockQuantity: number;
+
+  constructor(item: any) {
+    this.id = item.id;
+    this.price = item.price;
+    this.name = item.name;
+    this.thumbnailUrl = item.thumbnailUrl;
+    this.stockQuantity = item.stockQuantity;
+  }
+}
+
+export class CartItemResponse {
+  id: string;
+  product : ProductItem ;
   quantity: number;
 
   constructor(item: any) {
     this.id = item.id;
-    this.productId = item.productId;
+    this.product = item.product ;
     this.quantity = item.quantity;
   }
 }
 
-export class CartResponseDto {
+export class CartResponse {
   id: string;
   userId: string;
-  items: CartItemResponseDto[];
+  items: CartItemResponse[];
   totalItems: number; // Tổng số lượng sản phẩm (ví dụ: 5 món)
   totalUniqueItems: number; // Tổng số loại sản phẩm (ví dụ: 2 loại)
 
@@ -23,14 +39,14 @@ export class CartResponseDto {
 
     // Map danh sách items
     const rawItems = cart.items || [];
-    this.items = rawItems.map((item: any) => new CartItemResponseDto(item));
+    this.items = rawItems.map((item: any) => new CartItemResponse(item));
 
     // Tính toán số liệu tổng quát
     this.totalUniqueItems = this.items.length;
     this.totalItems = this.items.reduce((sum, item) => sum + item.quantity, 0);
   }
 
-  static from(cart: any): CartResponseDto {
-    return new CartResponseDto(cart);
+  static from(cart: any): CartResponse {
+    return new CartResponse(cart);
   }
 }

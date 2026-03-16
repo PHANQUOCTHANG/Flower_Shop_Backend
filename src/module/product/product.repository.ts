@@ -63,6 +63,8 @@ export class ProductRepository implements IProductRepository {
       ];
     }
 
+    console.log(query)
+
     // Thêm filter category nếu có
     if (query.category) {
       (where as any).categories = {

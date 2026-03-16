@@ -4,6 +4,7 @@ import { IProductRepository } from "./product.repository";
 import { ProductResponseDto } from "./product.response";
 import { CreateProductDto, UpdateProductDto } from "./product.request";
 import { ProductQuery } from "@/module/product/product.type";
+import { getCache, setCache, deleteCache } from "@/utils/cache";
 
 export interface IProductService {
   create(dto: CreateProductDto): Promise<ProductResponseDto>;
@@ -15,6 +16,9 @@ export interface IProductService {
 }
 
 export class ProductService implements IProductService {
+  private readonly CACHE_KEY = "products";
+  private readonly CACHE_TTL = 3600; // 1 giờ
+
   constructor(private readonly productRepo: IProductRepository) {}
 
   // [POST] Tạo sản phẩm mới kèm ảnh và danh mục
@@ -34,38 +38,77 @@ export class ProductService implements IProductService {
       slug,
     });
 
+    // [Cache] Xóa cache danh sách vì dữ liệu đã thay đổi
+    await deleteCache(`${this.CACHE_KEY}:all`);
+
     return ProductResponseDto.from(product);
   }
 
   // [GET] Lấy danh sách sản phẩm (hỗ trợ phân trang, search, filter)
   async findAll(query: ProductQuery) {
+    // [Cache] Tạo key dựa trên query để phân biệt các trang/bộ lọc
+    const cacheKey = `${this.CACHE_KEY}:all:${JSON.stringify(query)}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) {
+      console.log("cache redis")
+      return cached;
+    }
+
     const result = await this.productRepo.findAll(query);
 
-    return {
+    const response = {
       ...result,
       data: ProductResponseDto.fromList(result.data),
     };
+
+    // [Cache] Lưu dữ liệu vào redis (TTL 10 phút cho danh sách)
+    await setCache(cacheKey, response, 600);
+
+    console.log("database query")
+
+    return response;
   }
 
   // [GET] Chi tiết sản phẩm theo ID (kèm full ảnh và danh mục)
   async findById(id: string): Promise<ProductResponseDto> {
+    // [Cache] Kiểm tra cache trước
+    const cacheKey = `${this.CACHE_KEY}:id:${id}`;
+    const cached = await getCache<ProductResponseDto>(cacheKey);
+    if (cached) return cached;
+
     const product = await this.productRepo.findById(id);
 
     if (!product) {
       throw new AppError("Không tìm thấy sản phẩm", 404);
     }
 
-    return ProductResponseDto.from(product);
+    const response = ProductResponseDto.from(product);
+
+    // [Cache] Lưu cache chi tiết (TTL 1 giờ)
+    await setCache(cacheKey, response, this.CACHE_TTL);
+
+    return response;
   }
+
   // [GET] Chi tiết sản phẩm theo Slug (kèm full ảnh và danh mục)
   async findBySlug(slug: string): Promise<ProductResponseDto> {
+    // [Cache] Kiểm tra cache theo slug
+    const cacheKey = `${this.CACHE_KEY}:slug:${slug}`;
+    const cached = await getCache<ProductResponseDto>(cacheKey);
+    if (cached) return cached;
+
     const product = await this.productRepo.findBySlug(slug);
 
     if (!product) {
       throw new AppError("Không tìm thấy sản phẩm", 404);
     }
 
-    return ProductResponseDto.from(product);
+    const response = ProductResponseDto.from(product);
+
+    // [Cache] Lưu cache chi tiết
+    await setCache(cacheKey, response, this.CACHE_TTL);
+
+    return response;
   }
 
   // [PATCH] Cập nhật thông tin sản phẩm
@@ -88,6 +131,13 @@ export class ProductService implements IProductService {
       throw new AppError("Cập nhật sản phẩm thất bại", 500);
     }
 
+    // [Cache] Xóa các cache liên quan để đảm bảo dữ liệu mới
+    await Promise.all([
+      deleteCache(`${this.CACHE_KEY}:id:${id}`),
+      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
+      deleteCache(`${this.CACHE_KEY}:all`), // Xóa cache danh sách chung
+    ]);
+
     return ProductResponseDto.from(updated);
   }
 
@@ -101,5 +151,12 @@ export class ProductService implements IProductService {
 
     // 2. Gọi Repo để gán deletedAt và chuyển trạng thái sang hidden
     await this.productRepo.softDelete(id);
+
+    // [Cache] Xóa sạch các cache liên quan sau khi xóa sản phẩm
+    await Promise.all([
+      deleteCache(`${this.CACHE_KEY}:id:${id}`),
+      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
+      deleteCache(`${this.CACHE_KEY}:all`),
+    ]);
   }
 }
