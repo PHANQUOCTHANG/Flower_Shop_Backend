@@ -3,6 +3,7 @@ import { productService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
 import asyncHandler from "@/utils/asyncHandler";
 import { normalizeQueryProduct } from "@/module/product/product.type";
+import redisClient from "@/config/redis";
 
 // [POST] /api/v1/products - Tạo sản phẩm
 export const createProduct = asyncHandler(
@@ -28,10 +29,12 @@ export const getProduct = asyncHandler(async (req: Request, res: Response) => {
 });
 
 // [GET] /api/v1/products/:id - Chi tiết sản phẩm
-export const getProductBySlug = asyncHandler(async (req: Request, res: Response) => {
-  const data = await productService.findBySlug(req.params.slug as string);
-  return res.status(200).json(ApiResponse.success(data));
-});
+export const getProductBySlug = asyncHandler(
+  async (req: Request, res: Response) => {
+    const data = await productService.findBySlug(req.params.slug as string);
+    return res.status(200).json(ApiResponse.success(data));
+  },
+);
 
 // [PATCH] /api/v1/products/:id - Cập nhật sản phẩm
 export const updateProduct = asyncHandler(

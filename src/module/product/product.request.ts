@@ -51,6 +51,8 @@ const productBase = z.object({
 
   metaDescription: z.string().nullable().optional(),
 
+   metaKeywords: z.string().nullable().optional(),
+
   // Danh sách ID danh mục (truyền dưới dạng string UUID)
   categoryIds: z.array(z.string().uuid()).optional(),
 
