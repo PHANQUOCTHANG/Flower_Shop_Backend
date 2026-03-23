@@ -51,10 +51,9 @@ export const UpdateOrderStatusSchema = z.object({
   // Thường ID nằm trên Params, nhưng nếu bạn muốn validate trong Body:
   status: z.enum([
     "pending",
-    "confirmed",
     "processing",
     "shipping",
-    "delivered",
+    "completed",
     "cancelled",
   ]),
 

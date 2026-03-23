@@ -4,7 +4,7 @@ import { Request, Response } from "express";
 
 // Cookie config dùng chung
 const cookieOptions = {
-  httpOnly: true,
+  httpOnly: true, // Bảo mật, JS không đọc được
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
@@ -29,11 +29,20 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
 // POST | /api/auth/login
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  console.log("login", req.body) ;
+  console.log("login", req.body);
   const result = await authService.login(req.body);
 
   // Lưu refresh token
   res.cookie("refreshToken", result.refreshToken, cookieOptions);
+
+  console.log(result.user);
+  // lưu user vào cookie dưới dạng chuỗi JSON
+  res.cookie("user", JSON.stringify(result.user), {
+    httpOnly: false,
+    path: "/",
+    // Thêm maxAge để cookie không bị mất khi đóng trình duyệt (tùy chọn)
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+  });
 
   res.status(200).json({
     status: "success",
@@ -127,5 +136,5 @@ export const resetPassword = asyncHandler(
       status: "success",
       data: null,
     });
-  }
+  },
 );

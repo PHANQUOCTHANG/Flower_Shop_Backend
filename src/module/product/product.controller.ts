@@ -49,7 +49,9 @@ export const updateProduct = asyncHandler(
 // [DELETE] /api/v1/products/:id - Xóa mềm sản phẩm
 export const deleteProduct = asyncHandler(
   async (req: Request, res: Response) => {
-    await productService.delete(req.params.id as string);
+    const productId = req.params.id ;
+    console.log("Delete product: " ,productId)
+    await productService.delete(productId as string);
     return res.status(200).json(ApiResponse.success(null, "Đã xóa sản phẩm"));
   },
 );

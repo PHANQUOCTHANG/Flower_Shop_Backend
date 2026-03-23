@@ -31,7 +31,6 @@ export const requireAuth = (
     }
 
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    console.log(decoded)
 
     req.user = decoded ;
 

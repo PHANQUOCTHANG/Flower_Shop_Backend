@@ -128,7 +128,13 @@ import { IOrderRepository } from "./order.repository";
 import { ICartRepository } from "../cart/cart.repository";
 import { OrderResponseDto } from "./order.response";
 import { CheckoutDto } from "@/module/order/order.request";
-import { getCache, setCache, deleteCache } from "@/utils/cache";
+import {
+  getCache,
+  setCache,
+  deleteCache,
+  deleteCacheByPattern,
+} from "@/utils/cache";
+import { IUserRepository } from "@/module/user/user.repository";
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
@@ -146,6 +152,7 @@ export class OrderService implements IOrderService {
   constructor(
     private readonly orderRepo: IOrderRepository,
     private readonly cartRepo: ICartRepository,
+    private readonly userRepo: IUserRepository,
   ) {}
 
   /**
@@ -206,7 +213,7 @@ export class OrderService implements IOrderService {
     await Promise.all([
       deleteCache(`${this.CART_CACHE_KEY}:${userId}`),
       deleteCache(`${this.PRODUCT_CACHE_KEY}:all`),
-      deleteCache(`${this.CACHE_KEY}:list:${userId}`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`), // thêm :*
       // Xóa chi tiết sản phẩm trong đơn này để cập nhật lại stockQuantity thực tế
       ...orderItems.map((item) =>
         deleteCache(`${this.PRODUCT_CACHE_KEY}:id:${item.productId}`),
@@ -248,9 +255,10 @@ export class OrderService implements IOrderService {
     if (cached) return cached;
 
     const order = await this.orderRepo.findById(orderId);
+    const user = await this.userRepo.findById(userId);
 
     // Đảm bảo đơn hàng tồn tại và thuộc về chính User đó (trừ ADMIN)
-    if (!order || order.userId !== userId) {
+    if (!order || (order.userId !== userId  && user?.role === "CUSTOMER")) {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
@@ -259,6 +267,7 @@ export class OrderService implements IOrderService {
     // [Cache] Lưu cache chi tiết 10 phút
     await setCache(cacheKey, response, 600);
 
+    console.log("RP: ", response);
     return response;
   }
 
@@ -301,8 +310,9 @@ export class OrderService implements IOrderService {
     // Khi trạng thái đơn đổi, phải xóa cache chi tiết và cache danh sách của user đó
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${orderId}`),
-      deleteCache(`${this.CACHE_KEY}:list:${order.userId}`),
-      deleteCache(`${this.CACHE_KEY}:admin:all`),
+      // ✅ Dùng pattern scan để xoá tất cả key có prefix này
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${order.userId}:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`), // ❌ trước chỉ xoá key gốc
     ]);
 
     return response;

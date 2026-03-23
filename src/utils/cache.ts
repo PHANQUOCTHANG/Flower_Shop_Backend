@@ -18,3 +18,10 @@ export const setCache = async (
 export const deleteCache = async (key: string) => {
   await redisClient.del(key);
 };
+
+export const deleteCacheByPattern = async (pattern: string) => {
+  const keys = await redisClient.keys(pattern); // scan tất cả key khớp pattern
+  if (keys.length > 0) {
+    await redisClient.del(keys);
+  }
+};

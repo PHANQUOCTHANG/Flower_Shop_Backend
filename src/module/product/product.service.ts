@@ -4,7 +4,7 @@ import { IProductRepository } from "./product.repository";
 import { ProductResponseDto } from "./product.response";
 import { CreateProductDto, UpdateProductDto } from "./product.request";
 import { ProductQuery } from "@/module/product/product.type";
-import { getCache, setCache, deleteCache } from "@/utils/cache";
+import { getCache, setCache, deleteCache, deleteCacheByPattern } from "@/utils/cache";
 
 export interface IProductService {
   create(dto: CreateProductDto): Promise<ProductResponseDto>;
@@ -17,7 +17,7 @@ export interface IProductService {
 
 export class ProductService implements IProductService {
   private readonly CACHE_KEY = "products";
-  private readonly CACHE_TTL = 3600; // 1 giờ
+  private readonly CACHE_TTL = 300; // 1 giờ
 
   constructor(private readonly productRepo: IProductRepository) {}
 
@@ -39,7 +39,7 @@ export class ProductService implements IProductService {
     });
 
     // [Cache] Xóa cache danh sách vì dữ liệu đã thay đổi
-    await deleteCache(`${this.CACHE_KEY}:all`);
+    await deleteCacheByPattern(`${this.CACHE_KEY}:all:*`);
 
     return ProductResponseDto.from(product);
   }
@@ -50,7 +50,6 @@ export class ProductService implements IProductService {
     const cacheKey = `${this.CACHE_KEY}:all:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
     if (cached) {
-      console.log("cache redis")
       return cached;
     }
 
@@ -135,7 +134,7 @@ export class ProductService implements IProductService {
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${id}`),
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
-      deleteCache(`${this.CACHE_KEY}:all`), // Xóa cache danh sách chung
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`), // Xóa cache danh sách chung
     ]);
 
     return ProductResponseDto.from(updated);
@@ -156,7 +155,7 @@ export class ProductService implements IProductService {
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${id}`),
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
-      deleteCache(`${this.CACHE_KEY}:all`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),
     ]);
   }
 }
