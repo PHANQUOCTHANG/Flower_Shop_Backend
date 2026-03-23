@@ -53,6 +53,7 @@ export class ProductRepository implements IProductRepository {
     // Khởi tạo điều kiện where với softDelete
     const where: Prisma.ProductWhereInput = {
       deletedAt: null, // Chỉ lấy sản phẩm chưa bị xóa mềm
+      status: "active"
     };
 
     // Thêm filter search nếu có
@@ -62,8 +63,6 @@ export class ProductRepository implements IProductRepository {
         { sku: { contains: query.search, mode: "insensitive" } },
       ];
     }
-
-    console.log(query)
 
     // Thêm filter category nếu có
     if (query.category) {
@@ -92,15 +91,21 @@ export class ProductRepository implements IProductRepository {
       };
     }
 
-    // Xây dựng orderBy từ sort query (mặc định: -createdAt)
+    // Xây dựng orderBy từ sort query
     let orderBy: any = { createdAt: "desc" };
     switch (query.sort) {
+      case "oldest":
+        orderBy = { createdAt: "asc" };
+        break;
       case "price-asc":
         orderBy = { price: "asc" };
         break;
       case "price-desc":
         orderBy = { price: "desc" };
         break;
+      default:
+        orderBy = { createdAt: "desc" };
+        break ;
     }
 
     const [data, total] = await Promise.all([

@@ -43,6 +43,8 @@ export const loginSchema = z.object({
   email: z.string().email("Email không hợp lệ").toLowerCase().trim(),
 
   password: z.string().min(1, "Mật khẩu không được để trống"),
+  // Quyền người dùng - mặc định là CUSTOMER
+  role: UserRoleEnum.default("CUSTOMER").optional(),
 });
 
 // Request làm mới Access Token

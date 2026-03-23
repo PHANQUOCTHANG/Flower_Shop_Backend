@@ -3,7 +3,7 @@ import AppError from "@/utils/appError";
 import { ICategoryRepository } from "./category.repository";
 import { CategoryResponseDto } from "./category.response";
 import { CreateCategoryDto, UpdateCategoryDto } from "./category.request";
-import { getCache, setCache, deleteCache } from "@/utils/cache";
+import { getCache, setCache, deleteCache, deleteCacheByPattern } from "@/utils/cache";
 
 export interface ICategoryService {
   create(dto: CreateCategoryDto): Promise<CategoryResponseDto>;
@@ -37,7 +37,7 @@ export class CategoryService implements ICategoryService {
     const category = await this.categoryRepo.create(createData);
 
     // [Cache] Xóa cache danh sách vì dữ liệu đã thay đổi
-    await deleteCache(`${this.CACHE_KEY}:all`);
+    await deleteCacheByPattern(`${this.CACHE_KEY}:all:*`);
 
     return CategoryResponseDto.from(category);
   }
@@ -101,7 +101,7 @@ export class CategoryService implements ICategoryService {
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${id}`),
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Xóa theo slug cũ
-      deleteCache(`${this.CACHE_KEY}:all`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),
     ]);
 
     return CategoryResponseDto.from(updated!);
@@ -118,7 +118,7 @@ export class CategoryService implements ICategoryService {
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${id}`),
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
-      deleteCache(`${this.CACHE_KEY}:all`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),
     ]);
   }
 }

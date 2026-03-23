@@ -4,12 +4,11 @@ import { ApiResponse } from "@/utils/apiResponse";
 import { normalizeQuery } from "@/utils/query";
 import asyncHandler from "@/utils/asyncHandler";
 import { getUserId } from "@/helpers/getUserId";
+import { normalizeQueryOrder } from "@/module/order/order.type";
 
 // [POST] /api/v1/orders/checkout - Khách hàng đặt hàng
 export const checkout = asyncHandler(async (req: Request, res: Response) => {
   // userId lấy từ AuthMiddleware
-
-  console.log("checkout") ;
   const userId = getUserId(req) ;
   const data = await orderService.checkout(userId, req.body);
   
@@ -30,21 +29,22 @@ export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
 // [GET] /api/v1/orders/:id - Chi tiết đơn hàng (Dùng cho cả khách và admin)
 export const getOrderDetail = asyncHandler(async (req: Request, res: Response) => {
   const userId = getUserId(req) ;
-  const data = await orderService.findById(req.params.id as string, userId);
+  const orderId = req.params.id as string ;
+  const data = await orderService.findById(orderId, userId);
   
   return res.status(200).json(ApiResponse.success(data));
 });
 
 // [GET] /api/v1/orders - Admin lấy danh sách toàn bộ đơn hàng hệ thống
 export const getAllOrders = asyncHandler(async (req: Request, res: Response) => {
-  const query = normalizeQuery(req.query);
+  const query = normalizeQueryOrder(req.query);
   const result = await orderService.findAll(query);
   
   return res.status(200).json(ApiResponse.paginate(result));
 });
 
 // [PATCH] /api/v1/orders/:id/status - Admin cập nhật trạng thái đơn hàng
-export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {  
   const data = await orderService.updateStatus(
     req.params.id as string, 
     req.body.status

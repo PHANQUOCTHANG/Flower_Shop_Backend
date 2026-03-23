@@ -10,7 +10,7 @@ export const normalizeQuery = (query: any): BaseQuery => ({
   page: Math.max(Number(query.page) || 1, 1),
   limit: Math.min(Number(query.limit) || 10, 100),
   search: query.search?.trim() || "",
-  sort: query.sort || "-createdAt",
+  sort: query.sort || "newest",
 });
 
 // Kết quả phân trang chuẩn

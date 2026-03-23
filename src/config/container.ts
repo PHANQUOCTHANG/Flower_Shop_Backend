@@ -60,4 +60,4 @@ export const cartService : ICartService = new CartService(cartRepository , produ
 
 // Order 
 const orderRepository : IOrderRepository = new OrderRepository(prisma) ;
-export const orderService : IOrderService = new OrderService(orderRepository , cartRepository) ;
+export const orderService : IOrderService = new OrderService(orderRepository , cartRepository , userRepository) ;

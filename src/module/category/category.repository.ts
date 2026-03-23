@@ -33,12 +33,29 @@ export class CategoryRepository implements ICategoryRepository {
       }),
     };
 
+    // Xây dựng orderBy từ sort query (mặc định: -createdAt)
+    let orderBy: any = { createdAt: "desc" };
+    switch (query.sort) {
+      case "oldest":
+        orderBy = { createdAt: "asc" };
+        break;
+      case "price-asc":
+        orderBy = { price: "asc" };
+        break;
+      case "price-desc":
+        orderBy = { price: "desc" };
+        break;
+      default:
+        orderBy = { createdAt: "desc" };
+        break;
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.category.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+        orderBy,
       }),
       this.prisma.category.count({ where }),
     ]);
