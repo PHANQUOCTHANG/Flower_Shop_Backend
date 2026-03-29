@@ -1,4 +1,5 @@
 import { authService, otpService } from "@/config/container";
+import { getUserId } from "@/helpers/getUserId";
 import asyncHandler from "@/utils/asyncHandler";
 import { Request, Response } from "express";
 
@@ -130,6 +131,29 @@ export const resetPassword = asyncHandler(
       email,
       otp,
       newPassword,
+    });
+
+    res.status(204).json({
+      status: "success",
+      data: null,
+    });
+  },
+);
+
+// POST | /api/auth/change-password
+export const changePassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+
+    console.log("ChangePassword") ;
+    console.log(userId)
+
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    await authService.changePassword(userId, {
+      currentPassword,
+      newPassword,
+      confirmPassword,
     });
 
     res.status(204).json({

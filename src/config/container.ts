@@ -13,6 +13,7 @@ import {
 import { CategoryService } from "@/module/category/category.service";
 import { IOrderRepository, OrderRepository } from "@/module/order/order.repository";
 import { IOrderService, OrderService } from "@/module/order/order.service";
+import { ImageService } from "@/module/product/image.service";
 import {
   IProductRepository,
   ProductRepository,
@@ -28,6 +29,8 @@ export const userService = new UserService(userRepository);
 // Product
 const productRepository: IProductRepository = new ProductRepository(prisma);
 export const productService = new ProductService(productRepository);
+
+// Product_V2 
 
 // Category
 const categoryRepository: ICategoryRepository = new CategoryRepository(prisma);
@@ -61,3 +64,4 @@ export const cartService : ICartService = new CartService(cartRepository , produ
 // Order 
 const orderRepository : IOrderRepository = new OrderRepository(prisma) ;
 export const orderService : IOrderService = new OrderService(orderRepository , cartRepository , userRepository) ;
+export const imageService = new ImageService() ;

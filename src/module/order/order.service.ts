@@ -168,17 +168,10 @@ export class OrderService implements IOrderService {
     let totalPrice = 0;
     const orderItems = [];
 
-    // 2. Duyệt sản phẩm để tính giá và kiểm tra tồn kho (Snapshot)
+    // 2. Duyệt sản phẩm để tính giá (Snapshot)
+    // Lưu ý: Schema Product mới không có field stockQuantity, nên bỏ qua kiểm tra tồn kho
     for (const item of cart.items) {
       const product = item.product;
-
-      // Kiểm tra tồn kho
-      if (product.stockQuantity < item.quantity) {
-        throw new AppError(
-          `Sản phẩm "${product.name}" không đủ số lượng tồn kho (Còn: ${product.stockQuantity})`,
-          400,
-        );
-      }
 
       const itemPrice = Number(product.price);
       const subtotal = itemPrice * item.quantity;
@@ -258,7 +251,7 @@ export class OrderService implements IOrderService {
     const user = await this.userRepo.findById(userId);
 
     // Đảm bảo đơn hàng tồn tại và thuộc về chính User đó (trừ ADMIN)
-    if (!order || (order.userId !== userId  && user?.role === "CUSTOMER")) {
+    if (!order || (order.userId !== userId && user?.role === "CUSTOMER")) {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 

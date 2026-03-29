@@ -13,14 +13,8 @@ export class ProductResponseDto {
   description: string | null;
   price: number;
   comparePrice: number | null;
-  costPrice: number | null;
   sku: string | null;
-  stockQuantity: number;
-  lowStockThreshold: number | null;
   thumbnailUrl: string | null;
-  metaTitle: string | null;
-  metaDescription: string | null;
-  metaKeywords: string | null ;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -44,14 +38,8 @@ export class ProductResponseDto {
     this.comparePrice = product.comparePrice
       ? Number(product.comparePrice)
       : null;
-    this.costPrice = product.costPrice ? Number(product.costPrice) : null;
     this.sku = product.sku;
-    this.stockQuantity = product.stockQuantity;
-    this.lowStockThreshold = product.lowStockThreshold || null;
     this.thumbnailUrl = product.thumbnailUrl;
-    this.metaTitle = product.metaTitle || null;
-    this.metaDescription = product.metaDescription || null;
-    this.metaKeywords = product.metaKeywords || null ;
     this.status = product.status;
     this.createdAt = product.createdAt.toISOString();
     this.updatedAt = product.updatedAt.toISOString();

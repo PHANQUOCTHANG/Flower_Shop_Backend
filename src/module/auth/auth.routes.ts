@@ -6,6 +6,7 @@ import {
   loginSchema,
   refreshTokenSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 } from "@/module/auth/auth.request";
 import { sendOtpSchema, verifyOtpSchema } from "@/module/auth/otp/otp.request";
 
@@ -23,19 +24,17 @@ router.post(
 router.post("/login", validationMiddleware(loginSchema), authCtrl.login);
 
 // POST | /api/auth/refresh-token | Làm mới access token
-router.post(
-  "/refresh-token",
-  authCtrl.refresh,
-);
+router.post("/refresh-token", authCtrl.refresh);
 
 // POST | /api/auth/logout | Đăng xuất
-router.post(
-  "/logout",
-  authCtrl.logout,
-);
+router.post("/logout", authCtrl.logout);
 
 // POST | /api/auth/send-otp | Gửi OTP
-router.post("/forgot-password/send-otp", validationMiddleware(sendOtpSchema), authCtrl.sendOtp);
+router.post(
+  "/forgot-password/send-otp",
+  validationMiddleware(sendOtpSchema),
+  authCtrl.sendOtp,
+);
 
 // POST | /api/auth/verify-otp | Xác thực OTP
 router.post(
@@ -49,6 +48,13 @@ router.post(
   "/forgot-password/reset-password",
   validationMiddleware(resetPasswordSchema),
   authCtrl.resetPassword,
+);
+
+// POST | /api/auth/change-password | Thay đổi mật khẩu (khi đã đăng nhập)
+router.post(
+  "/change-password",
+  validationMiddleware(changePasswordSchema),
+  authCtrl.changePassword,
 );
 
 export default router;

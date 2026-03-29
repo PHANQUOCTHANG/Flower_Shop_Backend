@@ -1,11 +1,15 @@
 import { z } from "zod";
 
-// [Schema] Hình ảnh đi kèm sản phẩm
-const productImagesSchema = z.object({
+// ─── Sub-schemas ──────────────────────────────────────────────────────────────
+
+const productImageSchema = z.object({
   imageUrl: z.string().url("Link ảnh không hợp lệ"),
+  publicId: z.string().min(1, "Public ID is required"),
   isPrimary: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
 });
+
+// ─── Base schema ──────────────────────────────────────────────────────────────
 
 const productBase = z.object({
   name: z
@@ -14,62 +18,48 @@ const productBase = z.object({
     .min(2, "Tên tối thiểu 2 ký tự")
     .max(255, "Tên tối đa 255 ký tự"),
 
-  shortDescription: z
-    .string()
-    .max(500, "Mô tả ngắn tối đa 500 ký tự")
-    .nullable()
-    .optional(),
+  shortDescription: z.string().max(500).nullable().optional(),
 
   description: z.string().nullable().optional(),
 
-  // Giá cả xử lý dạng số ở tầng validation
-  price: z.number().min(0, "Giá không được âm"),
+  // FIX: FormData gửi số dạng string → coerce ép kiểu tự động
+  price: z.coerce.number().min(0, "Giá không được âm"),
 
-  comparePrice: z
+  comparePrice: z.coerce
     .number()
     .min(0, "Giá so sánh không được âm")
     .nullable()
     .optional(),
 
-  costPrice: z.number().min(0, "Giá vốn không được âm").nullable().optional(),
+  sku: z.string().max(100).nullable().optional(),
 
-  sku: z.string().max(100, "SKU tối đa 100 ký tự").nullable().optional(),
-
-  stockQuantity: z
-    .number()
-    .int()
-    .min(0, "Số lượng kho không được âm")
-    .default(0),
-
-  lowStockThreshold: z.number().int().min(0).default(5),
-
-  thumbnailUrl: z.string().url("Link ảnh không hợp lệ").nullable().optional(),
+  thumbnailUrl: z.string().url().nullable().optional(),
 
   status: z.enum(["active", "hidden", "draft"]).default("active"),
 
-  metaTitle: z.string().max(255).nullable().optional(),
+  // FIX: multer parse 1 item thành string, nhiều items thành string[]
+  // preprocess chuẩn hoá về array trước khi validate
+  categoryIds: z
+    .preprocess(
+      (val) => (val == null ? [] : Array.isArray(val) ? val : [val]),
+      z.array(z.string()),
+    )
+    .optional(),
 
-  metaDescription: z.string().nullable().optional(),
-
-   metaKeywords: z.string().nullable().optional(),
-
-  // Danh sách ID danh mục (truyền dưới dạng string UUID)
-  categoryIds: z.array(z.string().uuid()).optional(),
-
-  // Danh sách ảnh
-  images: z.array(productImagesSchema).optional(),
+  // images được controller gắn vào sau khi middleware upload xong
+  images: z.array(productImageSchema).optional(),
 });
 
-// [Schema] Tạo sản phẩm
-export const CreateProductSchema = productBase;
+// ─── Exported schemas ─────────────────────────────────────────────────────────
 
-// [Schema] Admin cập nhật sản phẩm
+export const CreateProductSchema = productBase;
 export const UpdateProductSchema = productBase.partial();
 
-// [Schema] Kiểm tra ID trên URL (UUID)
 export const ProductIdParamSchema = z.object({
   id: z.string().uuid("ID sản phẩm phải là UUID hợp lệ"),
 });
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type CreateProductDto = z.infer<typeof CreateProductSchema>;
 export type UpdateProductDto = z.infer<typeof UpdateProductSchema>;

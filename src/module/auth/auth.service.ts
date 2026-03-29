@@ -8,6 +8,7 @@ import {
   LoginRequest,
   RegisterRequest,
   ResetPasswordRequest,
+  ChangePasswordRequest,
 } from "./auth.request";
 import { AuthResponseDto } from "./auth.response";
 import { getCache, setCache, deleteCache } from "@/utils/cache";
@@ -25,6 +26,7 @@ export interface IAuthService {
   refresh(refreshToken: string): Promise<AuthResponseDto>;
   logout(refreshToken: string): Promise<void>;
   resetPassword(dto: ResetPasswordRequest): Promise<AuthResponseDto>;
+  changePassword(userId: string, dto: ChangePasswordRequest): Promise<void>;
 }
 
 export class AuthService implements IAuthService {
@@ -164,6 +166,37 @@ export class AuthService implements IAuthService {
       result.accessToken,
       result.refreshToken,
     );
+  }
+
+  // Thay đổi mật khẩu khi người dùng đã đăng nhập
+  async changePassword(
+    userId: string,
+    dto: ChangePasswordRequest,
+  ): Promise<void> {
+    const user = await this.userRepo.findById(userId);
+    if (!user || !user.password) {
+      throw new AppError("Người dùng không tồn tại", 404);
+    }
+
+    // 1. Xác minh mật khẩu hiện tại
+    const isValid = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isValid) {
+      throw new AppError("Mật khẩu hiện tại không chính xác", 401);
+    }
+
+    // 2. Hash mật khẩu mới
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+
+    // 3. Cập nhật mật khẩu
+    await this.userRepo.updateById(userId, {
+      password: hashedPassword,
+    });
+
+    // 4. Bảo mật: Thu hồi TOÀN BỘ phiên đăng nhập cũ
+    await Promise.all([
+      this.refreshRepo.revokeAllByUser(userId),
+      deleteCache(`${this.CACHE_KEY_REFRESH}*`),
+    ]);
   }
 
   // Hàm tạo JWT và lưu vào song song DB & Redis

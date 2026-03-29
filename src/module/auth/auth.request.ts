@@ -67,8 +67,29 @@ export const resetPasswordSchema = z.object({
   newPassword: z.string().min(8, "Mật khẩu mới phải từ 8 ký tự").max(255),
 });
 
+// Request Thay đổi mật khẩu (khi người dùng đã đăng nhập)
+export const changePasswordSchema = z
+  .object({
+    // Mật khẩu hiện tại - để xác minh người dùng
+    currentPassword: z.string().min(1, "Mật khẩu hiện tại không được để trống"),
+
+    // Mật khẩu mới - tối thiểu 8 ký tự
+    newPassword: z
+      .string()
+      .min(8, "Mật khẩu mới phải có ít nhất 8 ký tự")
+      .max(255),
+
+    // Xác nhận mật khẩu mới
+    confirmPassword: z.string().min(8, "Xác nhận mật khẩu không được để trống"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Mật khẩu mới và xác nhận mật khẩu không trùng khớp",
+    path: ["confirmPassword"],
+  });
+
 // Xuất các Type để sử dụng ở tầng Controller/Service
 export type RegisterRequest = z.infer<typeof registerSchema>;
 export type LoginRequest = z.infer<typeof loginSchema>;
 export type RefreshTokenRequest = z.infer<typeof refreshTokenSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
+export type ChangePasswordRequest = z.infer<typeof changePasswordSchema>;

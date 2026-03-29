@@ -12,7 +12,8 @@ export interface IOrderRepository {
 export class OrderRepository implements IOrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Tạo đơn hàng kèm OrderItems và trừ tồn kho (Transaction)
+  // Tạo đơn hàng kèm OrderItems (Transaction)
+  // Lưu ý: Schema Product mới không quản lý tồn kho nên không cần update stockQuantity
   async createOrder(data: {
     userId: string;
     totalPrice: number;
@@ -27,7 +28,7 @@ export class OrderRepository implements IOrderRepository {
     }[];
   }): Promise<Order> {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Tạo Order và OrderItems (Nested Write giống Product)
+      // Tạo Order và OrderItems (nested write)
       const order = await tx.order.create({
         data: {
           userId: data.userId,
@@ -48,16 +49,6 @@ export class OrderRepository implements IOrderRepository {
           items: true,
         },
       });
-
-      // 2. Cập nhật Stock cho từng sản phẩm (Decrement)
-      for (const item of data.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            stockQuantity: { decrement: item.quantity },
-          },
-        });
-      }
 
       return order;
     });

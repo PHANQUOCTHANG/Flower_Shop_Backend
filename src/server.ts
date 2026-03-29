@@ -7,6 +7,7 @@ import { globalErrorHandler } from "@/middleware/errorHandler";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { connectRedis } from "@/config/redis";
+import "@/config/cloudinary";
 
 const PORT = process.env.PORT || 8000;
 

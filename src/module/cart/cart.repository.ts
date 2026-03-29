@@ -30,7 +30,6 @@ export class CartRepository implements ICartRepository {
                 name: true,
                 price: true,
                 thumbnailUrl: true,
-                stockQuantity: true, // Cần thiết để check tồn kho khi checkout
               },
             },
           },

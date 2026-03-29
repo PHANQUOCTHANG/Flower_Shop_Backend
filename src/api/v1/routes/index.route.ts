@@ -9,7 +9,7 @@ import { requireAuth } from "@/middleware/auth.middleware";
 
 const clientRoute = (app: Application) => {
   const path = "/api";
-  app.use(path + "/users", userRoute);
+  app.use(path + "/users", requireAuth , userRoute);
   app.use(path + "/products", productRoute);
   app.use(path + "/categories", categoryRoute);
   app.use(path + "/auth", authRoute);

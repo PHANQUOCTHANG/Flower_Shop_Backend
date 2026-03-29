@@ -14,9 +14,54 @@ export interface IProductRepository {
 export class ProductRepository implements IProductRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
+  // Hàm tự sinh SKU duy nhất
+  private async generateSKU(productName: string): Promise<string> {
+    // Lấy 3 chữ cái đầu từ tên sản phẩm (viết hoa)
+    const prefix = productName
+      .substring(0, 3)
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "");
+
+    // Lấy số lượng sản phẩm hiện tại để tạo sequential ID
+    const count = await this.prisma.product.count();
+    const sequentialNum = String(count + 1).padStart(6, "0");
+
+    // Tạo SKU: PREFIX + SEQUENTIAL (e.g., "ROL000001", "HOA000002")
+    let sku = `${prefix || "PRD"}${sequentialNum}`;
+
+    // Đảm bảo SKU là duy nhất (nếu trùng, thêm random suffix)
+    let isUnique = false;
+    let attempts = 0;
+
+    while (!isUnique && attempts < 5) {
+      const exists = await this.prisma.product.count({
+        where: { sku },
+      });
+
+      if (exists === 0) {
+        isUnique = true;
+      } else {
+        // Thêm random suffix nếu trùng
+        const randomSuffix = Math.random()
+          .toString(36)
+          .substring(2, 5)
+          .toUpperCase();
+        sku = `${prefix || "PRD"}${sequentialNum}${randomSuffix}`;
+        attempts++;
+      }
+    }
+
+    return sku;
+  }
+
   // Tạo sản phẩm mới kèm theo ảnh và danh mục
   async create(data: any): Promise<Product> {
     const { categoryIds, images, ...productData } = data;
+
+    // Tự sinh SKU nếu không được cung cấp
+    if (!productData.sku) {
+      productData.sku = await this.generateSKU(productData.name);
+    }
 
     return this.prisma.product.create({
       data: {
@@ -53,7 +98,7 @@ export class ProductRepository implements IProductRepository {
     // Khởi tạo điều kiện where với softDelete
     const where: Prisma.ProductWhereInput = {
       deletedAt: null, // Chỉ lấy sản phẩm chưa bị xóa mềm
-      status: "active"
+      status: "active",
     };
 
     // Thêm filter search nếu có
@@ -105,7 +150,7 @@ export class ProductRepository implements IProductRepository {
         break;
       default:
         orderBy = { createdAt: "desc" };
-        break ;
+        break;
     }
 
     const [data, total] = await Promise.all([

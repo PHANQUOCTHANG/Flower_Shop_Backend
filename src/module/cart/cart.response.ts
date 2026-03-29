@@ -3,25 +3,23 @@ export class ProductItem {
   name: string;
   price: number;
   thumbnailUrl: string;
-  stockQuantity: number;
 
   constructor(item: any) {
     this.id = item.id;
     this.price = item.price;
     this.name = item.name;
     this.thumbnailUrl = item.thumbnailUrl;
-    this.stockQuantity = item.stockQuantity;
   }
 }
 
 export class CartItemResponse {
   id: string;
-  product : ProductItem ;
+  product: ProductItem;
   quantity: number;
 
   constructor(item: any) {
     this.id = item.id;
-    this.product = item.product ;
+    this.product = item.product;
     this.quantity = item.quantity;
   }
 }

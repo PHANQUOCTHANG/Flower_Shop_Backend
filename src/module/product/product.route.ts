@@ -1,29 +1,44 @@
 import { Router } from "express";
 import * as productCtrl from "./product.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
+import { uploadProductImages } from "@/middleware/upload.middleware";
 import {
   CreateProductSchema,
   UpdateProductSchema,
   ProductIdParamSchema,
 } from "./product.request";
+import { requireAuth, requireRole } from "@/middleware/auth.middleware";
 
 const router = Router();
 
-// Route danh sách và tạo mới
-router.route("/")
-  .get(productCtrl.getProducts)
-  .post(validationMiddleware(CreateProductSchema), productCtrl.createProduct);
-
-// Route thao tác theo ID
-router.route("/:id")
-  .get(validationMiddleware(ProductIdParamSchema, "params"), productCtrl.getProduct)
-  .patch(
+router.route("/").get(productCtrl.getProducts).post(
+  requireAuth,
+  // requireRole("ADMIN"),
+  uploadProductImages, // 🔥 parse form-data trước
+  validationMiddleware(CreateProductSchema), // 🔥 validate sau
+  productCtrl.createProduct,
+);
+router
+  .route("/:id")
+  .get(
     validationMiddleware(ProductIdParamSchema, "params"),
-    validationMiddleware(UpdateProductSchema),
-    productCtrl.updateProduct
+    productCtrl.getProduct,
   )
-  .delete(validationMiddleware(ProductIdParamSchema, "params"), productCtrl.deleteProduct);
+  .patch(
+    requireAuth,
+    requireRole("ADMIN"),
+    validationMiddleware(ProductIdParamSchema, "params"),
+    uploadProductImages, // Ảnh mới (optional)
+    validationMiddleware(UpdateProductSchema),
+    productCtrl.updateProduct,
+  )
+  .delete(
+    requireAuth,
+    requireRole("ADMIN"),
+    validationMiddleware(ProductIdParamSchema, "params"),
+    productCtrl.deleteProduct,
+  );
 
-router.route("/slug/:slug").get(productCtrl.getProductBySlug)
+router.route("/slug/:slug").get(productCtrl.getProductBySlug);
 
 export default router;
