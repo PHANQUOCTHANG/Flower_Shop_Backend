@@ -10,7 +10,6 @@ import {
   deleteCacheByPattern,
 } from "@/utils/cache";
 import { IUserRepository } from "@/module/user/user.repository";
-import { getAllCustomers } from "@/module/order/order.controller";
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
