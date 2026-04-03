@@ -1,8 +1,6 @@
 import { z } from "zod";
 
-// ===============================
-// [Schema] Item trong đơn hàng
-// ===============================
+// Validation cho item
 const OrderItemSchema = z.object({
   productId: z.string().uuid("ID sản phẩm không hợp lệ"),
   quantity: z
@@ -11,9 +9,7 @@ const OrderItemSchema = z.object({
     .min(1, "Số lượng tối thiểu là 1"),
 });
 
-// ===============================
-// [Schema] Khách hàng đặt hàng
-// ===============================
+// Validation checkout
 export const CheckoutSchema = z.object({
   name: z
     .string()
@@ -38,17 +34,11 @@ export const CheckoutSchema = z.object({
 
   note: z.string().trim().max(500, "Ghi chú tối đa 500 ký tự").optional(),
 
-  // Thêm mảng items vào đây
-  items: z
-    .array(OrderItemSchema)
-    .min(1, "Đơn hàng phải có ít nhất 1 sản phẩm"),
+  items: z.array(OrderItemSchema).min(1, "Đơn hàng phải có ít nhất 1 sản phẩm"),
 });
 
-// ===============================
-// [Schema] Admin cập nhật trạng thái đơn
-// ===============================
+// Validation cập nhật trạng thái
 export const UpdateOrderStatusSchema = z.object({
-  // Thường ID nằm trên Params, nhưng nếu bạn muốn validate trong Body:
   status: z.enum([
     "pending",
     "processing",
@@ -60,8 +50,6 @@ export const UpdateOrderStatusSchema = z.object({
   paymentStatus: z.enum(["unpaid", "paid", "refunded"]).optional(),
 });
 
-// ===============================
-// DTO
-// ===============================
+// Type DTO
 export type CheckoutDto = z.infer<typeof CheckoutSchema>;
 export type UpdateOrderStatusDto = z.infer<typeof UpdateOrderStatusSchema>;

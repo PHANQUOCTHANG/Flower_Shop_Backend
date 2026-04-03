@@ -5,18 +5,28 @@ import { addToCartSchema, updateQuantitySchema } from "./cart.request";
 import { requireAuth } from "@/middleware/auth.middleware";
 
 const router = Router();
+
+// GET giỏ hàng
 router.get("/", cartController.getMyCart);
+
+// POST thêm sản phẩm vào giỏ
 router.post(
   "/add",
   validationMiddleware(addToCartSchema),
   cartController.addToCart,
 );
+
+// PATCH cập nhật số lượng sản phẩm
 router.patch(
   "/update",
   validationMiddleware(updateQuantitySchema),
   cartController.updateCartQuantity,
 );
+
+// DELETE xóa sản phẩm (/:productId)
 router.delete("/items/:productId", cartController.removeItemFromCart);
+
+// DELETE làm trống giỏ hàng
 router.delete("/clear", cartController.clearMyCart);
 
 export default router;

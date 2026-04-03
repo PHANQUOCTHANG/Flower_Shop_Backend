@@ -32,6 +32,8 @@ export interface IAuthService {
 export class AuthService implements IAuthService {
   private readonly CACHE_KEY_REFRESH = "auth:refresh:";
   private readonly CACHE_KEY_BLACKLIST = "auth:blacklist:";
+  private readonly CACHE_TTL_REFRESH = 7 * 24 * 60 * 60; // 7 ngày - Refresh token (match JWT expiry)
+  private readonly CACHE_TTL_OTP = 300; // 5 phút - OTP verification (bảo mật, code tạm)
 
   constructor(
     private readonly userRepo: IUserRepository,
@@ -84,16 +86,21 @@ export class AuthService implements IAuthService {
 
   // Làm mới Access Token (Token Rotation + Redis Cache)
   async refresh(refreshToken: string): Promise<AuthResponseDto> {
+    console.log("RefreshToken: ", refreshToken);
     if (!refreshToken) throw new AppError("Không tìm thấy Refresh Token", 401);
 
-    // 1. Kiểm tra trong Redis trước để tối ưu tốc độ
+    // 1. Kiểm tra Redis trước - Cache refresh token (7 ngày)
     const cacheKey = `${this.CACHE_KEY_REFRESH}${refreshToken}`;
     let userId = await getCache<string>(cacheKey);
 
-    // 2. Nếu không có trong Redis, fallback kiểm tra database
+    // 2. Nếu không có cache, kiểm tra database (fallback)
     if (!userId) {
       const stored = await this.refreshRepo.findValid(refreshToken);
-      if (!stored) throw new AppError("Phiên làm việc hết hạn", 401);
+      console.log(stored);
+      if (!stored) {
+        console.log("OOKKKK");
+        throw new AppError("Phiên làm việc hết hạn", 401);
+      }
       userId = stored.userId;
     }
 
@@ -118,14 +125,15 @@ export class AuthService implements IAuthService {
   async logout(refreshToken: string, accessToken?: string): Promise<void> {
     if (!refreshToken) throw new AppError("Không tìm thấy Refresh Token", 401);
 
-    // 1. Thu hồi Refresh Token
+    // 1. Thu hồi Refresh Token (xóa DB + Redis cache)
     await Promise.all([
       this.refreshRepo.revoke(refreshToken),
       deleteCache(`${this.CACHE_KEY_REFRESH}${refreshToken}`),
     ]);
 
-    // 2. [Quan trọng] Đưa Access Token vào Blacklist (nếu có)
-    // Giúp token này không thể sử dụng cho đến khi nó tự hết hạn
+    // 2. [Bảo mật] Đưa Access Token vào Blacklist
+    // Ngăn token này sử dụng cho đến khi hết hạn
+    // TTL = thời gian còn lại của token
     if (accessToken) {
       const decoded: any = jwt.decode(accessToken);
       const remainingTime = decoded.exp - Math.floor(Date.now() / 1000);
@@ -152,12 +160,11 @@ export class AuthService implements IAuthService {
     });
     if (!user) throw new AppError("Người dùng không tồn tại", 404);
 
-    // 3. Bảo mật: Thu hồi TOÀN BỘ phiên đăng nhập cũ
+    // 3. Bảo mật: Thu hồi tất cả phiên đăng nhập cũ
     await Promise.all([
-      this.refreshRepo.revokeAllByUser(user.id),
-      this.otpRepo.deleteByEmail(dto.email),
-      // Xóa cache OTP (nếu bạn có dùng redis cho OTP ở phần trước)
-      deleteCache(`otp:${dto.email}`),
+      this.refreshRepo.revokeAllByUser(user.id), // Xóa DB
+      this.otpRepo.deleteByEmail(dto.email), // Xóa DB
+      deleteCache(`otp:${dto.email}`), // Xóa OTP cache (5 phút)
     ]);
 
     const result = await this.generateAuthResult(user);
@@ -192,14 +199,15 @@ export class AuthService implements IAuthService {
       password: hashedPassword,
     });
 
-    // 4. Bảo mật: Thu hồi TOÀN BỘ phiên đăng nhập cũ
+    // 4. Bảo mật: Thu hồi tất cả phiên đăng nhập cũ
+    // Người dùng phải đăng nhập lại với mật khẩu mới
     await Promise.all([
-      this.refreshRepo.revokeAllByUser(userId),
-      deleteCache(`${this.CACHE_KEY_REFRESH}*`),
+      this.refreshRepo.revokeAllByUser(userId), // Xóa DB
+      deleteCache(`${this.CACHE_KEY_REFRESH}*`), // Xóa Redis (pattern)
     ]);
   }
 
-  // Hàm tạo JWT và lưu vào song song DB & Redis
+  // Tạo JWT và lưu vào song song DB & Redis
   private async generateAuthResult(user: any): Promise<AuthResult> {
     const accessSecret = process.env.JWT_SECRET;
     const refreshSecret = process.env.JWT_REFRESH_SECRET;
@@ -218,7 +226,9 @@ export class AuthService implements IAuthService {
       expiresIn: "7d",
     });
 
-    // Lưu vào cả Database và Redis để tối ưu việc verify sau này
+    // Lưu refresh token vào cả DB và Redis (7 ngày - match JWT expiry)
+    // Redis: nhanh lookup khi refresh token
+    // DB: fallback + lưu trữ lâu dài
     await Promise.all([
       this.refreshRepo.createOrUpdate({
         userId: userIdStr,
@@ -228,7 +238,7 @@ export class AuthService implements IAuthService {
       setCache(
         `${this.CACHE_KEY_REFRESH}${refreshToken}`,
         userIdStr,
-        7 * 24 * 60 * 60,
+        this.CACHE_TTL_REFRESH,
       ),
     ]);
 

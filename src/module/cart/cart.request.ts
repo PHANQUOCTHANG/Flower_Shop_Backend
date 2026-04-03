@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Schema thêm sản phẩm vào giỏ
+// Add to cart validation
 export const addToCartSchema = z.object({
   productId: z
     .string({ message: "ID sản phẩm là bắt buộc" })
@@ -12,16 +12,16 @@ export const addToCartSchema = z.object({
     .min(1, "Số lượng tối thiểu là 1"),
 });
 
-// Schema cập nhật số lượng (ví dụ: tăng/giảm ở trang Cart)
+// Update quantity validation
 export const updateQuantitySchema = z.object({
   productId: z.string({ message: "ID sản phẩm là bắt buộc" }),
 
   quantity: z
     .number({ message: "Số lượng là bắt buộc" })
     .int()
-    .min(0, "Số lượng không được âm"), // 0 có thể hiểu là xóa khỏi giỏ
+    .min(0, "Số lượng không được âm"), // 0 = remove from cart
 });
 
-// Trích xuất Type để dùng trong Service/Controller
+// Type definitions
 export type AddToCartRequest = z.infer<typeof addToCartSchema>;
 export type UpdateQuantityRequest = z.infer<typeof updateQuantitySchema>;

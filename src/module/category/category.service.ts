@@ -3,7 +3,12 @@ import AppError from "@/utils/appError";
 import { ICategoryRepository } from "./category.repository";
 import { CategoryResponseDto } from "./category.response";
 import { CreateCategoryDto, UpdateCategoryDto } from "./category.request";
-import { getCache, setCache, deleteCache, deleteCacheByPattern } from "@/utils/cache";
+import {
+  getCache,
+  setCache,
+  deleteCache,
+  deleteCacheByPattern,
+} from "@/utils/cache";
 
 export interface ICategoryService {
   create(dto: CreateCategoryDto): Promise<CategoryResponseDto>;
@@ -15,18 +20,23 @@ export interface ICategoryService {
 
 export class CategoryService implements ICategoryService {
   private readonly CACHE_KEY = "categories";
-  private readonly CACHE_TTL = 3600; // 1 giờ
+  private readonly CACHE_TTL_LIST = 900; // 15 phút - danh sách danh mục (ít thay đổi)
+  private readonly CACHE_TTL_DETAIL = 1800; // 30 phút - chi tiết danh mục (rất ít thay đổi)
 
   constructor(private readonly categoryRepo: ICategoryRepository) {}
 
-  // [POST] Tạo danh mục + Tự động tạo slug
+  // Tạo danh mục mới
   async create(dto: CreateCategoryDto): Promise<CategoryResponseDto> {
+    // Tự động tạo slug chuẩn SEO từ tên danh mục
     const slug = slugify(dto.name, { lower: true, strict: true });
 
+    // Kiểm tra slug có trùng lặp không
     const existed = await this.categoryRepo.findBySlug(slug);
-    if (existed) throw new AppError("Danh mục này đã tồn tại", 400);
+    if (existed) {
+      throw new AppError("Danh mục này đã tồn tại", 400);
+    }
 
-    // Chuyển parentId sang string nếu có
+    // Chuẩn bị dữ liệu với parent relation
     const createData: any = {
       ...dto,
       slug,
@@ -36,14 +46,15 @@ export class CategoryService implements ICategoryService {
 
     const category = await this.categoryRepo.create(createData);
 
-    // [Cache] Xóa cache danh sách vì dữ liệu đã thay đổi
+    // Xóa cache danh sách
     await deleteCacheByPattern(`${this.CACHE_KEY}:all:*`);
 
     return CategoryResponseDto.from(category);
   }
 
-  async findAll(query: any) {
-    // [Cache] Tạo key dựa trên query để phân biệt phân trang/filter
+  // Lấy danh sách danh mục (hỗ trợ tìm kiếm và phân trang)
+  async findAll(query: any): Promise<any> {
+    // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:all:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
     if (cached) return cached;
@@ -55,70 +66,85 @@ export class CategoryService implements ICategoryService {
       data: CategoryResponseDto.fromList(result.data),
     };
 
-    // [Cache] Lưu dữ liệu vào redis (TTL 10 phút cho danh sách)
-    await setCache(cacheKey, response, 600);
+    // Lưu cache (15 phút - danh mục ít thay đổi)
+    await setCache(cacheKey, response, this.CACHE_TTL_LIST);
 
     return response;
   }
 
-  async findById(id: string) {
-    // [Cache] Kiểm tra cache theo ID
+  // Lấy chi tiết danh mục theo ID
+  async findById(id: string): Promise<CategoryResponseDto> {
+    // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:id:${id}`;
     const cached = await getCache<CategoryResponseDto>(cacheKey);
     if (cached) return cached;
 
     const category = await this.categoryRepo.findById(id);
-    if (!category) throw new AppError("Không tìm thấy danh mục", 404);
+    if (!category) {
+      throw new AppError("Không tìm thấy danh mục", 404);
+    }
 
     const response = CategoryResponseDto.from(category);
 
-    // [Cache] Lưu cache chi tiết
-    await setCache(cacheKey, response, this.CACHE_TTL);
+    // Lưu cache (30 phút - chi tiết danh mục rất ít thay đổi)
+    await setCache(cacheKey, response, this.CACHE_TTL_DETAIL);
 
     return response;
   }
 
-  // [PATCH] Cập nhật danh mục
-  async update(id: string, dto: UpdateCategoryDto) {
+  // Cập nhật danh mục
+  async update(
+    id: string,
+    dto: UpdateCategoryDto,
+  ): Promise<CategoryResponseDto> {
     const exists = await this.categoryRepo.findById(id);
-    if (!exists) throw new AppError("Danh mục không tồn tại", 404);
+    if (!exists) {
+      throw new AppError("Danh mục không tồn tại", 404);
+    }
 
     const updateData: any = { ...dto };
-    if (dto.name)
-      updateData.slug = slugify(dto.name, { lower: true, strict: true });
 
-    // Xử lý quan hệ parent
+    // Cập nhật slug nếu tên danh mục thay đổi
+    if (dto.name) {
+      updateData.slug = slugify(dto.name, { lower: true, strict: true });
+    }
+
+    // Kiểm tra logic khi cập nhật parent
     if (dto.parentId) {
-      if (dto.parentId === id)
-        throw new AppError("Không thể chọn chính nó làm danh mục cha", 400);
+      if (dto.parentId === id) {
+        throw new AppError(
+          "Không thể chọn chính nó làm danh mục trực thuộc",
+          400,
+        );
+      }
       updateData.parent = { connect: { id: dto.parentId } };
       delete updateData.parentId;
     }
 
     const updated = await this.categoryRepo.updateById(id, updateData);
 
-    // [Cache] Xóa các cache liên quan để đảm bảo dữ liệu mới
+    // Xóa cache liên quan
     await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${id}`),
-      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Xóa theo slug cũ
-      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),
+      deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`), // Cache danh sách (thông tin thay đổi)
     ]);
 
     return CategoryResponseDto.from(updated!);
   }
 
-  // [DELETE] Xóa mềm
-  async delete(id: string) {
+  // Xóa mềm danh mục
+  async delete(id: string): Promise<void> {
     const exists = await this.categoryRepo.findById(id);
-    if (!exists) throw new AppError("Danh mục không tồn tại", 404);
+    if (!exists) {
+      throw new AppError("Danh mục không tồn tại", 404);
+    }
 
     await this.categoryRepo.softDelete(id);
 
-    // [Cache] Xóa sạch các cache liên quan sau khi xóa
+    // Xóa cache liên quan
     await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${id}`),
-      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
-      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),
+      deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`), // Cache danh sách (bị ảnh hưởng bởi xóa)
     ]);
   }
 }

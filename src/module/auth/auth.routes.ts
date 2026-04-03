@@ -9,6 +9,7 @@ import {
   changePasswordSchema,
 } from "@/module/auth/auth.request";
 import { sendOtpSchema, verifyOtpSchema } from "@/module/auth/otp/otp.request";
+import { requireAuth } from "@/middleware/auth.middleware";
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.post(
 // POST | /api/auth/change-password | Thay đổi mật khẩu (khi đã đăng nhập)
 router.post(
   "/change-password",
+  requireAuth,
   validationMiddleware(changePasswordSchema),
   authCtrl.changePassword,
 );

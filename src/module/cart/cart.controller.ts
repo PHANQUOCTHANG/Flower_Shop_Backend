@@ -1,17 +1,15 @@
 import { Request, Response } from "express";
-import { cartService } from "@/config/container"; // Giả định bạn đã đăng ký vào container
+import { cartService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
 import asyncHandler from "@/utils/asyncHandler";
 import { CartResponse } from "./cart.response";
 import { getUserId } from "@/helpers/getUserId";
 
-// [GET] /api/v1/carts - Lấy chi tiết giỏ hàng của người dùng hiện tại
+// [GET] /api/v1/carts - Lấy chi tiết giỏ hàng
 export const getMyCart = asyncHandler(async (req: Request, res: Response) => {
-  // req.user.id lấy từ AuthMiddleware
   const userId = getUserId(req);
   const data = await cartService.getCart(userId);
 
-  // Trả về dữ liệu đã qua xử lý DTO (tính tổng tiền, format BigInt)
   return res
     .status(200)
     .json(
@@ -31,14 +29,11 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
     .json(ApiResponse.success(null, "Đã thêm sản phẩm vào giỏ hàng"));
 });
 
-// [PATCH] /api/v1/carts/update - Cập nhật số lượng sản phẩm trong giỏ
+// [PATCH] /api/v1/carts/update - Cập nhật số lượng sản phẩm
 export const updateCartQuantity = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
     const { productId, quantity } = req.body;
-
-    console.log("UserId", userId);
-    console.log("Update", req.body);
 
     await cartService.updateQuantity(userId, productId, Number(quantity));
 
@@ -48,7 +43,7 @@ export const updateCartQuantity = asyncHandler(
   },
 );
 
-// [DELETE] /api/v1/carts/items/:productId - Xóa một sản phẩm khỏi giỏ
+// [DELETE] /api/v1/carts/items/:productId - Xóa sản phẩm khỏi giỏ
 export const removeItemFromCart = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);

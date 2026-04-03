@@ -1,30 +1,29 @@
 import { Router } from "express";
 import * as orderCtrl from "./order.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
-import { 
-  CheckoutSchema, 
-  UpdateOrderStatusSchema, 
-} from "./order.request";
+import { CheckoutSchema, UpdateOrderStatusSchema } from "./order.request";
 
 const router = Router();
 
-// Path: /api/v1/orders
-router.route("/")
-  .get(orderCtrl.getAllOrders) // Admin lấy toàn bộ
-  .post(validationMiddleware(CheckoutSchema), orderCtrl.checkout); // Khách đặt hàng
+// GET danh sách & POST đặt hàng
+router
+  .route("/")
+  .get(orderCtrl.getAllOrders)
+  .post(validationMiddleware(CheckoutSchema), orderCtrl.checkout);
 
-// Path: /api/v1/orders/me (Lịch sử đơn hàng của chính khách hàng)
-router.route("/me")
-  .get(orderCtrl.getMyOrders);
+// GET danh sách khách hàng
+router.route("/customers/list").get(orderCtrl.getAllCustomers);
 
-// Path: /api/v1/orders/:id
-router.route("/:id")
-  .get(
-    orderCtrl.getOrderDetail
-  )
+// GET lịch sử đơn hàng
+router.route("/me").get(orderCtrl.getMyOrders);
+
+// GET chi tiết & PATCH cập nhật trạng thái
+router
+  .route("/:id")
+  .get(orderCtrl.getOrderDetail)
   .patch(
     validationMiddleware(UpdateOrderStatusSchema),
-    orderCtrl.updateOrderStatus
+    orderCtrl.updateOrderStatus,
   );
 
 export default router;

@@ -20,4 +20,5 @@ export interface IPaginatedResult<T> {
   page: number;
   limit: number;
   totalPages: number;
+  statusCounts?: Record<string, number>; // Đếm số lượng sản phẩm theo từng trạng thái
 }

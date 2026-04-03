@@ -1,5 +1,7 @@
 import { BaseQuery } from "@/utils/query";
 import { normalizeQuery } from "@/utils/query";
+
+// Kiểu query cho filter/sort đơn hàng
 export interface OrderQuery extends BaseQuery {
   status?: "pending" | "processing" | "completed" | "cancelled";
   paymentStatus?: "paid" | "unpaid";

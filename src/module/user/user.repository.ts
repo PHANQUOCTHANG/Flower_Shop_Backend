@@ -14,23 +14,24 @@ export interface IUserRepository {
 export class UserRepository implements IUserRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Tạo user
+  // Tạo người dùng mới (chuẩn hóa email)
   async create(data: Prisma.UserCreateInput): Promise<User> {
     return this.prisma.user.create({
       data: {
         ...data,
-        email: data.email.toLowerCase(), // Chuẩn hóa email
+        email: data.email.toLowerCase(), // Chuẩn hóa email (lowercase)
       },
     });
   }
 
-  // Lấy danh sách có phân trang + search
+  // Lấy danh sách người dùng (phân trang + tìm kiếm theo fullName/email)
   async findAll(query: BaseQuery): Promise<IPaginatedResult<User>> {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
 
+    // Xây dựng điều kiện tìm kiếm
     const where: Prisma.UserWhereInput = {
-      deletedAt: null, // Soft delete filter
+      deletedAt: null, // Chỉ lấy user chưa bị xóa mềm
       ...(query.search && {
         OR: [
           { fullName: { contains: query.search, mode: "insensitive" } },
@@ -39,6 +40,7 @@ export class UserRepository implements IUserRepository {
       }),
     };
 
+    // Lấy dữ liệu song song
     const [data, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
@@ -58,28 +60,34 @@ export class UserRepository implements IUserRepository {
     };
   }
 
-  async findById(id: string) {
+  // Lấy chi tiết người dùng theo ID (không lấy bị xóa mềm)
+  async findById(id: string): Promise<User | null> {
     return this.prisma.user.findFirst({
       where: { id, deletedAt: null },
     });
   }
 
-  async findByEmail(email: string) {
+  // Lấy người dùng theo email (không lấy bị xóa mềm)
+  async findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findFirst({
       where: { email: email.toLowerCase(), deletedAt: null },
     });
   }
 
-  async updateById(id: string, data: Prisma.UserUpdateInput) {
+  // Cập nhật người dùng theo ID
+  async updateById(
+    id: string,
+    data: Prisma.UserUpdateInput,
+  ): Promise<User | null> {
     try {
       return await this.prisma.user.update({ where: { id }, data });
     } catch (error: any) {
-      if (error.code === "P2025") return null; // Not found
+      if (error.code === "P2025") return null; // User không tồn tại
       throw error;
     }
   }
 
-  // Cập nhật theo Email (Dùng cho logic Reset Password)
+  // Cập nhật người dùng theo email (dùng cho Reset Password)
   async updateByEmail(email: string, data: any): Promise<User | null> {
     return this.prisma.user.update({
       where: { email },
@@ -87,8 +95,8 @@ export class UserRepository implements IUserRepository {
     });
   }
 
-  // Soft delete
-  async softDelete(id: string) {
+  // Xóa mềm người dùng (đánh dấu xóa, không xóa cứng)
+  async softDelete(id: string): Promise<void> {
     await this.prisma.user.update({
       where: { id },
       data: {

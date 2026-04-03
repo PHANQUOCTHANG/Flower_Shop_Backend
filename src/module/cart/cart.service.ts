@@ -18,61 +18,59 @@ export interface ICartService {
 
 export class CartService implements ICartService {
   private readonly CACHE_KEY = "cart";
-  private readonly CACHE_TTL = 1800; // 30 phút (Giỏ hàng nên cache ngắn hơn sản phẩm)
+  private readonly CACHE_TTL = 300; // 5 phút - giỏ hàng hay thay đổi, cần dữ liệu tương đối mới
 
   constructor(
     private readonly cartRepo: ICartRepository,
     private readonly productRepo: IProductRepository,
   ) {}
 
-  // Lấy chi tiết giỏ hàng của người dùng
+  // Lấy giỏ hàng người dùng
   async getCart(userId: string): Promise<any> {
-    // [Cache] Kiểm tra giỏ hàng trong cache trước
+    // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:${userId}`;
     const cachedCart = await getCache<any>(cacheKey);
     if (cachedCart) return cachedCart;
 
     const cart = await this.cartRepo.findByUserId(userId);
-
     const result = !cart ? { items: [], totalAmount: 0 } : cart;
 
-    // [Cache] Lưu vào redis
+    // Lưu vào cache (5 phút - giỏ hàng hay thay đổi, cần dữ liệu tương đối mới)
     await setCache(cacheKey, result, this.CACHE_TTL);
 
     return result;
   }
 
-  // Thêm sản phẩm vào giỏ hàng (Xử lý cộng dồn số lượng)
+  // Thêm sản phẩm vào giỏ (xử lý cộng dồn số lượng)
   async addToCart(
     userId: string,
     productId: string,
     quantity: number,
   ): Promise<void> {
-    // 1. Kiểm tra sản phẩm có tồn tại và còn hàng không
+    // Kiểm tra sản phẩm tồn tại
     const product = await this.productRepo.findById(productId);
     if (!product) throw new AppError("Sản phẩm không tồn tại", 404);
 
-    // 2. Lấy hoặc tạo giỏ hàng mới cho User
+    // Lấy hoặc tạo giỏ hàng
     const cart = await this.cartRepo.getOrCreateCart(userId);
 
-    // 3. Kiểm tra sản phẩm đã có trong giỏ chưa
+    // Kiểm tra sản phẩm có trong giỏ
     const existingItem = await this.cartRepo.findItemInCart(cart.id, productId);
 
     if (existingItem) {
-      // Nếu đã có: Cập nhật cộng thêm số lượng
+      // Update: increment quantity
       const newQuantity = existingItem.quantity + quantity;
       await this.cartRepo.updateQuantity(existingItem.id, newQuantity);
     } else {
-      // Nếu chưa có: Tạo mới CartItem với giá hiện tại của sản phẩm
-      console.log("Cart", { cartId: cart.id, productId, quantity });
+      // Create: new item
       await this.cartRepo.addItem(cart.id, productId, quantity);
     }
 
-    // [Cache] Xóa cache giỏ hàng để lần sau lấy dữ liệu mới nhất
+    // Xóa cache (giỏ hàng đã thay đổi)
     await deleteCache(`${this.CACHE_KEY}:${userId}`);
   }
 
-  // Cập nhật số lượng trực tiếp (ví dụ: thay đổi ở input số lượng)
+  // Cập nhật số lượng sản phẩm
   async updateQuantity(
     userId: string,
     productId: string,
@@ -88,11 +86,11 @@ export class CartService implements ICartService {
 
     await this.cartRepo.updateQuantity(item.id, quantity);
 
-    // [Cache] Invalidate cache
+    // Xóa cache (giỏ hàng đã thay đổi)
     await deleteCache(`${this.CACHE_KEY}:${userId}`);
   }
 
-  // Xóa một sản phẩm khỏi giỏ
+  // Xóa sản phẩm khỏi giỏ
   async removeItem(userId: string, productId: string): Promise<void> {
     const cart = await this.cartRepo.findByUserId(userId);
     if (!cart) return;
@@ -101,18 +99,18 @@ export class CartService implements ICartService {
     if (item) {
       await this.cartRepo.removeItem(item.id);
 
-      // [Cache] Cập nhật lại cache sau khi xóa item
+      // Xóa cache (giỏ hàng đã thay đổi)
       await deleteCache(`${this.CACHE_KEY}:${userId}`);
     }
   }
 
-  // Xóa sạch giỏ hàng
+  // Làm trống giỏ hàng
   async clearCart(userId: string): Promise<void> {
     const cart = await this.cartRepo.findByUserId(userId);
     if (cart) {
       await this.cartRepo.clearCart(cart.id.toString());
 
-      // [Cache] Xóa cache hoàn toàn
+      // Xóa cache (giỏ hàng đã trống)
       await deleteCache(`${this.CACHE_KEY}:${userId}`);
     }
   }

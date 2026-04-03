@@ -4,8 +4,7 @@ import { ApiResponse } from "@/utils/apiResponse";
 import { userService } from "@/config/container";
 import { normalizeQuery } from "@/utils/query";
 
-
-// [POST] /api/v1/users - Tạo người dùng
+// [POST] /api/v1/users - Tạo người dùng mới
 export const createUser = asyncHandler(async (req: Request, res: Response) => {
   const data = await userService.create(req.body);
 
@@ -17,7 +16,6 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
 // [GET] /api/v1/users - Lấy danh sách người dùng (phân trang)
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   const query = normalizeQuery(req.query);
-
   const result = await userService.findAll(query);
 
   return res.status(200).json(ApiResponse.paginate(result));
@@ -30,7 +28,7 @@ export const getUser = asyncHandler(async (req: Request, res: Response) => {
   return res.status(200).json(ApiResponse.success(data));
 });
 
-// [PATCH] /api/v1/users/:id - Cập nhật người dùng
+// [PATCH] /api/v1/users/:id - Cập nhật thông tin người dùng
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   const data = await userService.update(req.params.id as string, req.body);
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// [Schema] Base cho Category
+// Schema cơ bản danh mục
 const categoryBase = z.object({
   name: z.string().trim().min(2, "Tên danh mục tối thiểu 2 ký tự").max(150),
   description: z.string().nullable().optional(),
@@ -16,13 +16,10 @@ const categoryBase = z.object({
   metaDescription: z.string().nullable().optional(),
 });
 
-// [Schema] Tạo mới
 export const CreateCategorySchema = categoryBase;
 
-// [Schema] Cập nhật
 export const UpdateCategorySchema = categoryBase.partial();
 
-// [Schema] Validate ID param
 export const CategoryIdParamSchema = z.object({
   id: z.string().uuid("ID danh mục phải là UUID hợp lệ"),
 });

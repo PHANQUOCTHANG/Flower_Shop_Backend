@@ -28,18 +28,18 @@ export class CartResponse {
   id: string;
   userId: string;
   items: CartItemResponse[];
-  totalItems: number; // Tổng số lượng sản phẩm (ví dụ: 5 món)
-  totalUniqueItems: number; // Tổng số loại sản phẩm (ví dụ: 2 loại)
+  totalItems: number; // Total quantity
+  totalUniqueItems: number; // Total unique items
 
   constructor(cart: any) {
     this.id = cart.id;
     this.userId = cart.userId;
 
-    // Map danh sách items
+    // Map items
     const rawItems = cart.items || [];
     this.items = rawItems.map((item: any) => new CartItemResponse(item));
 
-    // Tính toán số liệu tổng quát
+    // Calculate stats
     this.totalUniqueItems = this.items.length;
     this.totalItems = this.items.reduce((sum, item) => sum + item.quantity, 0);
   }

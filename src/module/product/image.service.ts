@@ -1,19 +1,18 @@
 import cloudinary from "@/config/cloudinary";
 
 export class ImageService {
-  // Called after middleware has already uploaded to Cloudinary
-  // Files already have path (URL) and filename (publicId) set by middleware
+  // Chuyển đổi file từ multer thành định dạng chuẩn lưu vào DB
   convertUploadedFilesToImages(files: Express.Multer.File[]) {
     return files.map((file, index) => ({
-      imageUrl: file.path, // URL from middleware (file.path = result.secure_url)
-      publicId: file.filename, // publicId from middleware (file.filename = result.public_id)
+      imageUrl: file.path,
+      publicId: file.filename,
       isPrimary: index === 0,
       sortOrder: index,
     }));
   }
 
-  // Legacy method - for direct uploads (if middleware is not used)
-  async uploadMultiple(files: Express.Multer.File[]) {
+  // Upload trực tiếp nhiều file lên Cloudinary
+  async uploadMultiple(files: Express.Multer.File[]): Promise<any[]> {
     const uploadPromises = files.map((file) => {
       return new Promise<any>((resolve, reject) => {
         cloudinary.uploader
@@ -28,14 +27,15 @@ export class ImageService {
     const results = await Promise.all(uploadPromises);
 
     return results.map((item, index) => ({
-      imageUrl: item.secure_url, // Match schema field name
+      imageUrl: item.secure_url,
       publicId: item.public_id,
       isPrimary: index === 0,
       sortOrder: index,
     }));
   }
 
-  async deleteMultiple(publicIds: string[]) {
+  // Xóa nhiều ảnh trên Cloudinary
+  async deleteMultiple(publicIds: string[]): Promise<any[]> {
     return Promise.all(publicIds.map((id) => cloudinary.uploader.destroy(id)));
   }
 }

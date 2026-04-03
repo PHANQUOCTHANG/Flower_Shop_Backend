@@ -1,128 +1,3 @@
-// import AppError from "@/utils/appError";
-// import { IOrderRepository } from "./order.repository";
-// import { ICartRepository } from "../cart/cart.repository";
-// import { OrderResponseDto } from "./order.response";
-// import { CheckoutDto } from "@/module/order/order.request";
-
-// export interface IOrderService {
-//   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
-//   findAll(query: any): Promise<any>;
-//   findByUserId(userId: string, query: any): Promise<any>;
-//   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
-//   updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
-// }
-
-// export class OrderService implements IOrderService {
-//   constructor(
-//     private readonly orderRepo: IOrderRepository,
-//     private readonly cartRepo: ICartRepository
-//   ) {}
-
-//   /**
-//    * Quy trình đặt hàng: Validate giỏ hàng -> Check kho -> Chốt giá -> Create Order & Trừ kho -> Clear Cart
-//    */
-//   async checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
-//     // 1. Lấy giỏ hàng hiện tại của User
-//     const cart = await this.cartRepo.findByUserId(userId);
-//     if (!cart || cart.items.length === 0) {
-//       throw new AppError("Giỏ hàng của bạn đang trống", 400);
-//     }
-
-//     let totalPrice = 0;
-//     const orderItems = [];
-
-//     // 2. Duyệt sản phẩm để tính giá và kiểm tra tồn kho (Snapshot)
-//     for (const item of cart.items) {
-//       const product = item.product;
-
-//       // Kiểm tra tồn kho
-//       if (product.stockQuantity < item.quantity) {
-//         throw new AppError(
-//           `Sản phẩm "${product.name}" không đủ số lượng tồn kho (Còn: ${product.stockQuantity})`,
-//           400
-//         );
-//       }
-
-//       const itemPrice = Number(product.price);
-//       const subtotal = itemPrice * item.quantity;
-//       totalPrice += subtotal;
-
-//       // Chuẩn bị dữ liệu Item để lưu vào Order (Snapshot giá tại thời điểm mua)
-//       orderItems.push({
-//         productId: product.id,
-//         quantity: item.quantity,
-//         price: itemPrice,
-//         subtotal: subtotal,
-//       });
-//     }
-
-//     // 3. Gọi Repo thực hiện Transaction: Tạo Order + OrderItems + Trừ kho Product
-//     // Vì Repo đã dùng $transaction, nên nếu trừ kho lỗi thì Order sẽ không được tạo
-//     const order = await this.orderRepo.createOrder({
-//       userId,
-//       totalPrice,
-//       shippingAddress: dto.shippingAddress,
-//       shippingPhone: dto.shippingPhone,
-//       paymentMethod: dto.paymentMethod,
-//       items: orderItems,
-//     });
-
-//     // 4. Làm trống giỏ hàng sau khi đặt thành công
-//     await this.cartRepo.clearCart(cart.id);
-
-//     return OrderResponseDto.from(order);
-//   }
-
-//   /**
-//    * Lấy danh sách đơn hàng của người dùng (Customer)
-//    */
-//   async findByUserId(userId: string, query: any): Promise<any> {
-//     const result = await this.orderRepo.findByUserId(userId, query);
-
-//     return {
-//       ...result,
-//       data: OrderResponseDto.fromList(result.data),
-//     };
-//   }
-
-//   /**
-//    * Xem chi tiết đơn hàng (kèm bảo mật userId)
-//    */
-//   async findById(orderId: string, userId: string): Promise<OrderResponseDto> {
-//     const order = await this.orderRepo.findById(orderId);
-
-//     // Đảm bảo đơn hàng tồn tại và thuộc về chính User đó (trừ ADMIN)
-//     if (!order || order.userId !== userId) {
-//       throw new AppError("Không tìm thấy đơn hàng", 404);
-//     }
-
-//     return new OrderResponseDto(order);
-//   }
-
-//   /**
-//    * ADMIN: Lấy tất cả đơn hàng hệ thống
-//    */
-//   async findAll(query: any): Promise<any> {
-//     const result = await this.orderRepo.findAll(query);
-
-//     return {
-//       ...result,
-//       data: OrderResponseDto.fromList(result.data),
-//     };
-//   }
-
-//   /**
-//    * (ADMIN) : Cập nhật trạng thái đơn hàng
-//    */
-//   async updateStatus(orderId: string, status: string): Promise<OrderResponseDto> {
-//     const order = await this.orderRepo.updateStatus(orderId, status);
-//     if (!order) {
-//       throw new AppError("Không tìm thấy đơn hàng để cập nhật", 404);
-//     }
-//     return OrderResponseDto.from(order);
-//   }
-// }
-
 import AppError from "@/utils/appError";
 import { IOrderRepository } from "./order.repository";
 import { ICartRepository } from "../cart/cart.repository";
@@ -135,6 +10,7 @@ import {
   deleteCacheByPattern,
 } from "@/utils/cache";
 import { IUserRepository } from "@/module/user/user.repository";
+import { getAllCustomers } from "@/module/order/order.controller";
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
@@ -142,12 +18,17 @@ export interface IOrderService {
   findByUserId(userId: string, query: any): Promise<any>;
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
   updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
+  findAllCustomers(query: any): Promise<any>;
 }
 
 export class OrderService implements IOrderService {
   private readonly CACHE_KEY = "orders";
   private readonly PRODUCT_CACHE_KEY = "products";
   private readonly CART_CACHE_KEY = "cart";
+  private readonly CACHE_TTL_USER_LIST = 600; // 10 phút - lịch sử đơn khách (read thường)
+  private readonly CACHE_TTL_DETAIL = 900; // 15 phút - chi tiết đơn (read nhiều lần)
+  private readonly CACHE_TTL_ADMIN_LIST = 120; // 2 phút - danh sách admin (cần dữ liệu tương đối mới)
+  private readonly CACHE_TTL_CUSTOMER_LIST = 300; // 5 phút - danh sách khách hàng (read thường)
 
   constructor(
     private readonly orderRepo: IOrderRepository,
@@ -155,11 +36,9 @@ export class OrderService implements IOrderService {
     private readonly userRepo: IUserRepository,
   ) {}
 
-  /**
-   * Quy trình đặt hàng: Validate giỏ hàng -> Check kho -> Chốt giá -> Create Order & Trừ kho -> Clear Cart
-   */
+  // Quy trình checkout: Kiểm tra giỏ -> Khóa giá -> Tạo đơn -> Làm trống giỏ
   async checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
-    // 1. Lấy giỏ hàng hiện tại của User
+    // Lấy giỏ hàng của khách
     const cart = await this.cartRepo.findByUserId(userId);
     if (!cart || cart.items.length === 0) {
       throw new AppError("Giỏ hàng của bạn đang trống", 400);
@@ -168,8 +47,7 @@ export class OrderService implements IOrderService {
     let totalPrice = 0;
     const orderItems = [];
 
-    // 2. Duyệt sản phẩm để tính giá (Snapshot)
-    // Lưu ý: Schema Product mới không có field stockQuantity, nên bỏ qua kiểm tra tồn kho
+    // Tính giá sản phẩm (snapshot)
     for (const item of cart.items) {
       const product = item.product;
 
@@ -177,7 +55,7 @@ export class OrderService implements IOrderService {
       const subtotal = itemPrice * item.quantity;
       totalPrice += subtotal;
 
-      // Chuẩn bị dữ liệu Item để lưu vào Order (Snapshot giá tại thời điểm mua)
+      // Chuẩn bị item cho order
       orderItems.push({
         productId: product.id,
         quantity: item.quantity,
@@ -186,7 +64,7 @@ export class OrderService implements IOrderService {
       });
     }
 
-    // 3. Gọi Repo thực hiện Transaction: Tạo Order + OrderItems + Trừ kho Product
+    // Tạo order via repository transaction
     const order = await this.orderRepo.createOrder({
       userId,
       totalPrice,
@@ -196,18 +74,14 @@ export class OrderService implements IOrderService {
       items: orderItems,
     });
 
-    // 4. Làm trống giỏ hàng sau khi đặt thành công
+    // Làm trống giỏ hàng
     await this.cartRepo.clearCart(cart.id);
 
-    // [Cache Invalidation]
-    // - Xóa cache giỏ hàng của user
-    // - Xóa cache danh sách sản phẩm (vì tồn kho đã thay đổi)
-    // - Xóa cache danh sách đơn hàng của user
+    // Xóa cache
     await Promise.all([
       deleteCache(`${this.CART_CACHE_KEY}:${userId}`),
       deleteCache(`${this.PRODUCT_CACHE_KEY}:all`),
-      deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`), // thêm :*
-      // Xóa chi tiết sản phẩm trong đơn này để cập nhật lại stockQuantity thực tế
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`),
       ...orderItems.map((item) =>
         deleteCache(`${this.PRODUCT_CACHE_KEY}:id:${item.productId}`),
       ),
@@ -216,11 +90,9 @@ export class OrderService implements IOrderService {
     return OrderResponseDto.from(order);
   }
 
-  /**
-   * Lấy danh sách đơn hàng của người dùng (Customer)
-   */
+  // Lấy danh sách đơn hàng khách hàng
   async findByUserId(userId: string, query: any): Promise<any> {
-    // [Cache] Kiểm tra cache danh sách đơn hàng của user
+    // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:list:${userId}:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
     if (cached) return cached;
@@ -232,17 +104,15 @@ export class OrderService implements IOrderService {
       data: OrderResponseDto.fromList(result.data),
     };
 
-    // [Cache] Lưu cache 5 phút (Đơn hàng thường không đổi liên tục)
-    await setCache(cacheKey, response, 300);
+    // Cache 10 phút (lịch sử đơn hàng - read thường xuyên, không cần quá mới)
+    await setCache(cacheKey, response, this.CACHE_TTL_USER_LIST);
 
     return response;
   }
 
-  /**
-   * Xem chi tiết đơn hàng (kèm bảo mật userId)
-   */
+  // Chi tiết đơn hàng (có kiểm tra bảo mật)
   async findById(orderId: string, userId: string): Promise<OrderResponseDto> {
-    // [Cache] Kiểm tra cache chi tiết đơn hàng
+    // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:id:${orderId}`;
     const cached = await getCache<OrderResponseDto>(cacheKey);
     if (cached) return cached;
@@ -250,25 +120,22 @@ export class OrderService implements IOrderService {
     const order = await this.orderRepo.findById(orderId);
     const user = await this.userRepo.findById(userId);
 
-    // Đảm bảo đơn hàng tồn tại và thuộc về chính User đó (trừ ADMIN)
+    // Kiểm tra quyền truy cập
     if (!order || (order.userId !== userId && user?.role === "CUSTOMER")) {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
     const response = new OrderResponseDto(order);
 
-    // [Cache] Lưu cache chi tiết 10 phút
-    await setCache(cacheKey, response, 600);
+    // Cache 15 phút (chi tiết đơn - read nhiều lần, ít thay đổi)
+    await setCache(cacheKey, response, this.CACHE_TTL_DETAIL);
 
-    console.log("RP: ", response);
     return response;
   }
 
-  /**
-   * ADMIN: Lấy tất cả đơn hàng hệ thống
-   */
+  // Danh sách đơn hàng (admin)
   async findAll(query: any): Promise<any> {
-    // [Cache] Admin cache thường để ngắn hơn hoặc không cache tùy nhu cầu
+    // Cache 2 phút (admin list - cần dữ liệu tương đối mới)
     const cacheKey = `${this.CACHE_KEY}:admin:all:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
     if (cached) return cached;
@@ -280,14 +147,12 @@ export class OrderService implements IOrderService {
       data: OrderResponseDto.fromList(result.data),
     };
 
-    await setCache(cacheKey, response, 60); // Admin cache 1 phút
+    await setCache(cacheKey, response, this.CACHE_TTL_ADMIN_LIST);
 
     return response;
   }
 
-  /**
-   * (ADMIN) : Cập nhật trạng thái đơn hàng
-   */
+  // Cập nhật trạng thái đơn hàng (admin)
   async updateStatus(
     orderId: string,
     status: string,
@@ -299,15 +164,29 @@ export class OrderService implements IOrderService {
 
     const response = OrderResponseDto.from(order);
 
-    // [Cache Invalidation]
-    // Khi trạng thái đơn đổi, phải xóa cache chi tiết và cache danh sách của user đó
+    // Xóa cache liên quan
     await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${orderId}`),
-      // ✅ Dùng pattern scan để xoá tất cả key có prefix này
-      deleteCacheByPattern(`${this.CACHE_KEY}:list:${order.userId}:*`),
-      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`), // ❌ trước chỉ xoá key gốc
+      deleteCache(`${this.CACHE_KEY}:id:${orderId}`), // Cache chi tiết đơn
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${order.userId}:*`), // Cache lịch sử đơn khách
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`), // Cache danh sách admin
+      deleteCacheByPattern(`${this.CACHE_KEY}:customers:*`), // Cache danh sách khách hàng
     ]);
 
     return response;
+  }
+
+  // Danh sách khách hàng (admin)
+  async findAllCustomers(query: any): Promise<any> {
+    // Kiểm tra cache
+    const cacheKey = `${this.CACHE_KEY}:customers:${JSON.stringify(query)}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.orderRepo.findAllCustomers(query);
+
+    // Cache 5 phút (danh sách khách - read thường, không cần quá mới)
+    await setCache(cacheKey, result, this.CACHE_TTL_CUSTOMER_LIST);
+
+    return result;
   }
 }

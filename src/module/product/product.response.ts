@@ -15,11 +15,11 @@ export class ProductResponseDto {
   comparePrice: number | null;
   sku: string | null;
   thumbnailUrl: string | null;
+  thumbnailPublicId: string | null;
   status: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
-
   images: any[];
   categories: any[];
 
@@ -34,26 +34,31 @@ export class ProductResponseDto {
     this.slug = product.slug;
     this.shortDescription = product.shortDescription || null;
     this.description = product.description || null;
-    this.price = Number(product.price); // Decimal -> Number
+
+    // Ép kiểu Decimal từ DB sang Number
+    this.price = Number(product.price);
     this.comparePrice = product.comparePrice
       ? Number(product.comparePrice)
       : null;
+
     this.sku = product.sku;
     this.thumbnailUrl = product.thumbnailUrl;
+    this.thumbnailPublicId = product.thumbnailPublicId || null;
     this.status = product.status;
     this.createdAt = product.createdAt.toISOString();
     this.updatedAt = product.updatedAt.toISOString();
     this.deletedAt = product.deletedAt ? product.deletedAt.toISOString() : null;
 
-    // Map danh sách ảnh
+    // Map danh sách hình ảnh
     this.images =
       product.images?.map((img: ProductImage) => ({
         id: img.id,
         url: img.imageUrl,
         isPrimary: img.isPrimary,
+        publicId: img.publicId,
       })) || [];
 
-    // Map chi tiết danh mục
+    // Map danh mục liên quan
     this.categories =
       product.categories?.map(
         (c: ProductCategory & { category?: Category }) => ({
@@ -64,11 +69,13 @@ export class ProductResponseDto {
       ) || [];
   }
 
-  static from(p: Product) {
+  // Tạo DTO từ một sản phẩm
+  static from(p: Product): ProductResponseDto {
     return new ProductResponseDto(p);
   }
 
-  static fromList(ps: Product[]) {
+  // Tạo DTO từ danh sách sản phẩm
+  static fromList(ps: Product[]): ProductResponseDto[] {
     return ps.map((p) => new ProductResponseDto(p));
   }
 }

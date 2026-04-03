@@ -1,9 +1,7 @@
 import { z } from "zod";
 import { UserRole, AuthProvider } from "@prisma/client";
 
-/**
- * Base schema dùng chung
- */
+// Schema base dùng chung cho tất cả users
 const userBase = z.object({
   fullName: z
     .string()
@@ -32,9 +30,9 @@ const userBase = z.object({
     .max(255, "Mật khẩu tối đa 255 ký tự")
     .optional(),
 
-  role: z.nativeEnum(UserRole).default(UserRole.CUSTOMER), // Role mặc định
+  role: z.nativeEnum(UserRole).default(UserRole.CUSTOMER), // Mặc định CUSTOMER
 
-  provider: z.nativeEnum(AuthProvider).default(AuthProvider.LOCAL), // Provider mặc định
+  provider: z.nativeEnum(AuthProvider).default(AuthProvider.LOCAL), // Mặc định LOCAL
 
   providerId: z.string().max(255).nullable().optional(),
 
@@ -45,13 +43,11 @@ const userBase = z.object({
   emailVerified: z.boolean().default(false),
 });
 
-/**
- * Tạo user
- */
+// Validation tạo user mới
 export const CreateUserSchema = userBase
-  .omit({ isActive: true, emailVerified: true }) // Không cho set 2 field này khi tạo
+  .omit({ isActive: true, emailVerified: true })
   .superRefine((data, ctx) => {
-    // Nếu đăng ký LOCAL thì bắt buộc password
+    // Bắt buộc mật khẩu nếu đăng ký LOCAL
     if (data.provider === AuthProvider.LOCAL && !data.password) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -61,9 +57,7 @@ export const CreateUserSchema = userBase
     }
   });
 
-/**
- * Update user (Admin)
- */
+// Validation cập nhật user (Admin)
 export const UpdateUserSchema = userBase
   .pick({
     fullName: true,
@@ -74,11 +68,9 @@ export const UpdateUserSchema = userBase
     avatar: true,
     password: true,
   })
-  .partial(); // Cho phép update từng phần
+  .partial(); // Cho phép cập nhật từng phần
 
-/**
- * Validate param ID
- */
+// Validation ID parameter (UUID)
 export const IdParamSchema = z.object({
   id: z.string().uuid("ID phải là UUID hợp lệ"),
 });

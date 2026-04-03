@@ -7,13 +7,13 @@ export interface IOrderRepository {
   findById(id: string): Promise<Order | null>;
   findByUserId(userId: string, query: any): Promise<IPaginatedResult<Order>>;
   updateStatus(id: string, status: string): Promise<Order | null>;
+  findAllCustomers(query: any): Promise<IPaginatedResult<any>>;
 }
 
 export class OrderRepository implements IOrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Tạo đơn hàng kèm OrderItems (Transaction)
-  // Lưu ý: Schema Product mới không quản lý tồn kho nên không cần update stockQuantity
+  // Tạo đơn hàng kèm items (transaction)
   async createOrder(data: {
     userId: string;
     totalPrice: number;
@@ -28,7 +28,7 @@ export class OrderRepository implements IOrderRepository {
     }[];
   }): Promise<Order> {
     return this.prisma.$transaction(async (tx) => {
-      // Tạo Order và OrderItems (nested write)
+      // Tạo order với nested write items
       const order = await tx.order.create({
         data: {
           userId: data.userId,
@@ -54,7 +54,7 @@ export class OrderRepository implements IOrderRepository {
     });
   }
 
-  // Lấy danh sách tất cả đơn hàng (Admin) kèm phân trang và lọc đầy đủ
+  // Lấy danh sách đơn hàng (admin) với phân trang và lọc
   async findAll(query: any): Promise<IPaginatedResult<Order>> {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
@@ -62,7 +62,7 @@ export class OrderRepository implements IOrderRepository {
 
     const where: Prisma.OrderWhereInput = {};
 
-    // Lọc theo trạng thái đơn hàng
+    // Lọc theo trạng thái
     if (query.status) {
       where.status = query.status;
     }
@@ -72,7 +72,7 @@ export class OrderRepository implements IOrderRepository {
       where.paymentStatus = query.paymentStatus;
     }
 
-    // Lọc theo khoảng thời gian
+    // Lọc theo khoảng ngày
     if (query.dateFrom || query.dateTo) {
       where.createdAt = {};
       if (query.dateFrom) {
@@ -112,7 +112,7 @@ export class OrderRepository implements IOrderRepository {
         break;
     }
 
-    const [data, total] = await Promise.all([
+    const [data, total, statusCounts] = await Promise.all([
       this.prisma.order.findMany({
         where,
         skip,
@@ -124,6 +124,7 @@ export class OrderRepository implements IOrderRepository {
         orderBy,
       }),
       this.prisma.order.count({ where }),
+      this.getStatusCounts(), // Đếm đơn hàng theo trạng thái
     ]);
 
     return {
@@ -132,10 +133,11 @@ export class OrderRepository implements IOrderRepository {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+      statusCounts,
     };
   }
 
-  // Chi tiết đơn hàng (Dùng findUnique để tối ưu vì ID là UUID)
+  // Chi tiết đơn hàng
   async findById(id: string): Promise<Order | null> {
     return this.prisma.order.findUnique({
       where: { id },
@@ -154,27 +156,51 @@ export class OrderRepository implements IOrderRepository {
     });
   }
 
-  // Lấy lịch sử mua hàng của một User cụ thể
+  // Lịch sử đơn hàng của khách hàng
   async findByUserId(
     userId: string,
     query: any,
   ): Promise<IPaginatedResult<Order>> {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
+    const skip = (page - 1) * limit;
 
     const where: Prisma.OrderWhereInput = { userId };
 
-    const [data, total] = await Promise.all([
+    // Lọc theo trạng thái
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    // Xây dựng sort
+    let orderBy: any = { createdAt: "desc" };
+    switch (query.sort) {
+      case "oldest":
+        orderBy = { createdAt: "asc" };
+        break;
+      case "price-asc":
+        orderBy = { totalPrice: "asc" };
+        break;
+      case "price-desc":
+        orderBy = { totalPrice: "desc" };
+        break;
+      default:
+        orderBy = { createdAt: "desc" };
+        break;
+    }
+
+    const [data, total, statusCounts] = await Promise.all([
       this.prisma.order.findMany({
         where,
-        skip: (page - 1) * limit,
+        skip,
         take: limit,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         include: {
           _count: { select: { items: true } },
         },
       }),
       this.prisma.order.count({ where }),
+      this.getStatusCounts(), // Lấy đếm đơn hàng theo từng trạng thái
     ]);
 
     return {
@@ -183,10 +209,11 @@ export class OrderRepository implements IOrderRepository {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+      statusCounts,
     };
   }
 
-  // Cập nhật trạng thái đơn hàng
+  // Cập nhật trạng thái
   async updateStatus(id: string, status: string): Promise<Order | null> {
     try {
       return await this.prisma.order.update({
@@ -197,5 +224,152 @@ export class OrderRepository implements IOrderRepository {
       if (error.code === "P2025") return null;
       throw error;
     }
+  }
+
+  // Đếm đơn hàng theo trạng thái
+  private async getStatusCounts(): Promise<Record<string, number>> {
+    const results = await this.prisma.order.groupBy({
+      by: ["status"],
+      _count: true,
+    });
+
+    const statusCounts: Record<string, number> = {};
+    results.forEach((result) => {
+      statusCounts[result.status] = result._count;
+    });
+
+    return statusCounts;
+  }
+
+  // Danh sách khách hàng
+  async findAllCustomers(query: any): Promise<IPaginatedResult<any>> {
+    const page = Math.max(query.page ?? 1, 1);
+    const limit = Math.min(query.limit ?? 10, 100);
+
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+      isActive: true,
+      role: "CUSTOMER",
+    };
+
+    // Search by name or email
+    if (query.search) {
+      where.OR = [
+        { fullName: { contains: query.search, mode: "insensitive" } },
+        { email: { contains: query.search, mode: "insensitive" } },
+      ];
+    }
+
+    // Get all customers (calculate stats before pagination)
+    const users = await this.prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        avatar: true,
+        isActive: true,
+        emailVerified: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Calculate total spent and last order date
+    const customerStats = await Promise.all(
+      users.map(async (user) => {
+        const [totalSpent, lastOrderDate] = await Promise.all([
+          this.prisma.order.aggregate({
+            where: {
+              userId: user.id,
+              status: "completed",
+            },
+            _sum: {
+              totalPrice: true,
+            },
+          }),
+          this.prisma.order.findFirst({
+            where: {
+              userId: user.id,
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              createdAt: true,
+            },
+          }),
+        ]);
+
+        return {
+          ...user,
+          totalSpent: Number(totalSpent._sum.totalPrice || 0),
+          lastOrderDate: lastOrderDate?.createdAt || null,
+        };
+      }),
+    );
+
+    // Filter: only customers with at least 1 completed order
+    const filteredStats = customerStats.filter((stat) => stat.totalSpent > 0);
+
+    // Sort by parameter
+    let sorted = filteredStats;
+    switch (query.sort) {
+      case "oldest":
+        sorted = filteredStats.sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+        );
+        break;
+      case "name-asc":
+        sorted = filteredStats.sort((a, b) =>
+          a.fullName.localeCompare(b.fullName),
+        );
+        break;
+      case "name-desc":
+        sorted = filteredStats.sort((a, b) =>
+          b.fullName.localeCompare(a.fullName),
+        );
+        break;
+      case "spent-asc":
+        sorted = filteredStats.sort((a, b) => a.totalSpent - b.totalSpent);
+        break;
+      case "spent-desc":
+        sorted = filteredStats.sort((a, b) => b.totalSpent - a.totalSpent);
+        break;
+      case "lastorder-asc":
+        sorted = filteredStats.sort((a, b) => {
+          if (!a.lastOrderDate && !b.lastOrderDate) return 0;
+          if (!a.lastOrderDate) return 1;
+          if (!b.lastOrderDate) return -1;
+          return a.lastOrderDate.getTime() - b.lastOrderDate.getTime();
+        });
+        break;
+      case "lastorder-desc":
+        sorted = filteredStats.sort((a, b) => {
+          if (!a.lastOrderDate && !b.lastOrderDate) return 0;
+          if (!a.lastOrderDate) return 1;
+          if (!b.lastOrderDate) return -1;
+          return b.lastOrderDate.getTime() - a.lastOrderDate.getTime();
+        });
+        break;
+      default:
+        sorted = filteredStats.sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+        break;
+    }
+
+    // Apply pagination
+    const start = (page - 1) * limit;
+    const paginatedData = sorted.slice(start, start + limit);
+
+    return {
+      data: paginatedData,
+      total: filteredStats.length,
+      page,
+      limit,
+      totalPages: Math.ceil(filteredStats.length / limit),
+    };
   }
 }

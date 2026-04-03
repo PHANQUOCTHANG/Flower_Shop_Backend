@@ -6,51 +6,64 @@ import asyncHandler from "@/utils/asyncHandler";
 import { getUserId } from "@/helpers/getUserId";
 import { normalizeQueryOrder } from "@/module/order/order.type";
 
-// [POST] /api/v1/orders/checkout - Khách hàng đặt hàng
+// [POST] /api/v1/orders - Đặt hàng
 export const checkout = asyncHandler(async (req: Request, res: Response) => {
-  // userId lấy từ AuthMiddleware
-  const userId = getUserId(req) ;
+  const userId = getUserId(req);
   const data = await orderService.checkout(userId, req.body);
-  
-  return res
-    .status(201)
-    .json(ApiResponse.success(data, "Đặt hàng thành công"));
+
+  return res.status(201).json(ApiResponse.success(data, "Đặt hàng thành công"));
 });
 
-// [GET] /api/v1/orders/me - Khách hàng xem lịch sử đơn hàng của mình
+// [GET] /api/v1/orders/me - Lịch sử đơn hàng
 export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
-  const query = normalizeQuery(req.query);
-  const userId = getUserId(req) ;
-  const result = await orderService.findByUserId(userId, query);
-  
-  return res.status(200).json(ApiResponse.paginate(result));
-});
-
-// [GET] /api/v1/orders/:id - Chi tiết đơn hàng (Dùng cho cả khách và admin)
-export const getOrderDetail = asyncHandler(async (req: Request, res: Response) => {
-  const userId = getUserId(req) ;
-  const orderId = req.params.id as string ;
-  const data = await orderService.findById(orderId, userId);
-  
-  return res.status(200).json(ApiResponse.success(data));
-});
-
-// [GET] /api/v1/orders - Admin lấy danh sách toàn bộ đơn hàng hệ thống
-export const getAllOrders = asyncHandler(async (req: Request, res: Response) => {
   const query = normalizeQueryOrder(req.query);
-  const result = await orderService.findAll(query);
-  
+  const userId = getUserId(req);
+  const result = await orderService.findByUserId(userId, query);
+
   return res.status(200).json(ApiResponse.paginate(result));
 });
 
-// [PATCH] /api/v1/orders/:id/status - Admin cập nhật trạng thái đơn hàng
-export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {  
-  const data = await orderService.updateStatus(
-    req.params.id as string, 
-    req.body.status
-  );
-  
-  return res
-    .status(200)
-    .json(ApiResponse.success(data, "Cập nhật trạng thái thành công"));
-});
+// [GET] /api/v1/orders/:id - Chi tiết đơn hàng
+export const getOrderDetail = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    const orderId = req.params.id as string;
+    const data = await orderService.findById(orderId, userId);
+
+    return res.status(200).json(ApiResponse.success(data));
+  },
+);
+
+// [GET] /api/v1/orders - Danh sách đơn hàng (admin)
+export const getAllOrders = asyncHandler(
+  async (req: Request, res: Response) => {
+    const query = normalizeQueryOrder(req.query);
+    const result = await orderService.findAll(query);
+
+    return res.status(200).json(ApiResponse.paginate(result));
+  },
+);
+
+// [GET] /api/v1/orders/customers/list - Danh sách khách hàng (admin)
+export const getAllCustomers = asyncHandler(
+  async (req: Request, res: Response) => {
+    const query = normalizeQuery(req.query);
+    const result = await orderService.findAllCustomers(query);
+
+    return res.status(200).json(ApiResponse.paginate(result));
+  },
+);
+
+// [PATCH] /api/v1/orders/:id/status - Cập nhật trạng thái (admin)
+export const updateOrderStatus = asyncHandler(
+  async (req: Request, res: Response) => {
+    const data = await orderService.updateStatus(
+      req.params.id as string,
+      req.body.status,
+    );
+
+    return res
+      .status(200)
+      .json(ApiResponse.success(data, "Cập nhật trạng thái thành công"));
+  },
+);

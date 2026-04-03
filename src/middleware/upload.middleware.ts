@@ -4,13 +4,13 @@ import { StorageEngine } from "multer";
 import { Request } from "express";
 import AppError from "@/utils/appError";
 
-// Custom StorageEngine — upload stream thẳng lên Cloudinary v2
+// Custom storage engine: upload stream trực tiếp lên Cloudinary
 class CloudinaryStorage implements StorageEngine {
   _handleFile(
     _req: Request,
     file: Express.Multer.File,
     cb: (error?: any, info?: Partial<Express.Multer.File>) => void,
-  ) {
+  ): void {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: "products",
@@ -20,16 +20,17 @@ class CloudinaryStorage implements StorageEngine {
         ],
       },
       (error, result) => {
-        if (error || !result) return cb(error ?? new Error("Upload thất bại"));
+        if (error || !result) {
+          return cb(error ?? new Error("Upload thất bại"));
+        }
+
         cb(undefined, {
-          path: result.secure_url, // URL ảnh công khai
-          filename: result.public_id, // public_id để xóa sau
+          path: result.secure_url,
+          filename: result.public_id,
         });
       },
     );
 
-    // FIX: với custom StorageEngine, multer cấp file.stream (Readable) chứ không
-    // populate file.buffer — dùng file.stream.pipe() thay vì streamifier
     file.stream.pipe(uploadStream);
   }
 
@@ -37,33 +38,43 @@ class CloudinaryStorage implements StorageEngine {
     _req: Request,
     file: Express.Multer.File & { filename: string },
     cb: (error: Error | null) => void,
-  ) {
-    cloudinary.uploader.destroy(file.filename, (error) => cb(error ?? null));
+  ): void {
+    cloudinary.uploader.destroy(file.filename, (error) => {
+      cb(error ?? null);
+    });
   }
 }
 
+// Kiểm tra loại file được phép
 const fileFilter = (
   _req: Express.Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback,
-) => {
-  const allowed = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-  if (allowed.includes(file.mimetype)) {
+): void => {
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+
+  if (ALLOWED_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new AppError("Chỉ chấp nhận ảnh JPG, PNG, WEBP", 400));
   }
 };
 
+// Cấu hình multer với CloudinaryStorage
 const upload = multer({
   storage: new CloudinaryStorage(),
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024, files: 11 }, // 10 gallery + 1 thumbnail
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+    files: 11, // 10 gallery + 1 thumbnail
+  },
 });
 
-// FIX: .fields() nhận đồng thời "images" và "thumbnail"
-// .array("images") cũ chỉ nhận gallery, bỏ qua thumbnail hoàn toàn
+// Upload ảnh sản phẩm (10 ảnh gallery + 1 ảnh thumbnail)
 export const uploadProductImages = upload.fields([
   { name: "images", maxCount: 10 },
   { name: "thumbnail", maxCount: 1 },
 ]);
+
+// Upload ảnh danh mục (1 ảnh)
+export const uploadCategoryThumbnail = upload.single("thumbnail");

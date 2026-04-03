@@ -17,7 +17,7 @@ export interface ICartRepository {
 export class CartRepository implements ICartRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Lấy giỏ hàng kèm theo thông tin chi tiết sản phẩm
+  // Lấy giỏ hàng kèm thông tin sản phẩm
   async findByUserId(userId: string) {
     return this.prisma.cart.findUnique({
       where: { userId },
@@ -38,7 +38,7 @@ export class CartRepository implements ICartRepository {
     });
   }
 
-  // Lấy giỏ hàng hiện tại, nếu chưa có thì tạo mới (Upsert logic)
+  // Lấy giỏ hàng hoặc tạo mới nếu chưa có
   async getOrCreateCart(userId: string): Promise<Cart> {
     let cart = await this.prisma.cart.findUnique({ where: { userId } });
 
@@ -60,7 +60,7 @@ export class CartRepository implements ICartRepository {
     });
   }
 
-  // Thêm sản phẩm vào giỏ hoặc cập nhật nếu đã tồn tại
+  // Thêm sản phẩm vào giỏ
   async addItem(
     cartId: string,
     productId: string,
@@ -75,7 +75,7 @@ export class CartRepository implements ICartRepository {
     });
   }
 
-  // Cập nhật số lượng của một item trong giỏ
+  // Cập nhật số lượng sản phẩm
   async updateQuantity(itemId: string, quantity: number): Promise<void> {
     await this.prisma.cartItem.update({
       where: { id: itemId },
@@ -83,14 +83,14 @@ export class CartRepository implements ICartRepository {
     });
   }
 
-  // Xóa một sản phẩm khỏi giỏ hàng
+  // Xóa sản phẩm khỏi giỏ
   async removeItem(itemId: string): Promise<void> {
     await this.prisma.cartItem.delete({
       where: { id: itemId },
     });
   }
 
-  // Xóa toàn bộ sản phẩm trong giỏ (sau khi thanh toán)
+  // Xóa toàn bộ sản phẩm trong giỏ
   async clearCart(cartId: string): Promise<void> {
     await this.prisma.cartItem.deleteMany({
       where: { cartId },

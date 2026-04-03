@@ -2,12 +2,6 @@ import { Request, Response, NextFunction } from "express";
 import { ZodSchema, ZodError, ZodIssue } from "zod";
 import AppError from "@/utils/appError";
 
-/**
- * Middleware để validate dữ liệu request sử dụng Zod schemas
- * @param schema - Zod schema để validate
- * @param part - Phần của request cần validate (body, params, query)
- * @returns Express middleware function
- */
 const validationMiddleware =
   (schema: ZodSchema, part: "body" | "params" | "query" = "body") =>
   async (req: Request, _res: Response, next: NextFunction): Promise<void> => {

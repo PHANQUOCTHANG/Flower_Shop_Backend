@@ -21,10 +21,13 @@ export class CategoryResponseDto {
     this.createdAt = category.createdAt.toISOString();
   }
 
-  static from(c: Category) {
+  // Tạo DTO từ một danh mục
+  static from(c: Category): CategoryResponseDto {
     return new CategoryResponseDto(c);
   }
-  static fromList(cs: Category[]) {
+
+  // Tạo DTO từ danh sách danh mục
+  static fromList(cs: Category[]): CategoryResponseDto[] {
     return cs.map((c) => new CategoryResponseDto(c));
   }
 }

@@ -4,14 +4,7 @@ import { ApiResponse } from "@/utils/apiResponse";
 import asyncHandler from "@/utils/asyncHandler";
 import { normalizeQueryProduct } from "@/module/product/product.type";
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
-
-/**
- * Trích xuất files theo field name.
- * Hỗ trợ cả hai kiểu req.files từ multer:
- *   - .array()  → Express.Multer.File[]           (lọc theo fieldname)
- *   - .fields() → { [field]: Express.Multer.File[] }
- */
+// Trích xuất file từ request theo field name
 function extractFiles(req: Request, field: string): Express.Multer.File[] {
   const files = req.files;
   if (!files) return [];
@@ -19,25 +12,26 @@ function extractFiles(req: Request, field: string): Express.Multer.File[] {
   return files[field] ?? [];
 }
 
-// ─── Controllers ──────────────────────────────────────────────────────────────
-
-// [POST] /api/v1/products
+// [POST] /api/v1/products - Tạo sản phẩm mới
 export const createProduct = asyncHandler(
-  async (req: Request, res: Response) => {
-    // Gallery images — middleware đã upload lên Cloudinary
+  async (req: Request, res: Response): Promise<Response> => {
+    // Xử lý ảnh gallery từ middleware upload
     const galleryFiles = extractFiles(req, "images");
     const images =
       galleryFiles.length > 0
         ? imageService.convertUploadedFilesToImages(galleryFiles)
         : [];
 
-    // Thumbnail — lấy secure_url từ file.path (đã được middleware gán)
+    // Xử lý ảnh thumbnail
     const [thumbnailFile] = extractFiles(req, "thumbnail");
     const thumbnailUrl = thumbnailFile?.path ?? undefined;
+    const thumbnailPublicId = thumbnailFile?.filename ?? undefined;
 
+    // Gọi service tạo sản phẩm
     const data = await productService.create({
       ...req.body,
       ...(thumbnailUrl && { thumbnailUrl }),
+      ...(thumbnailPublicId && { thumbnailPublicId }),
       images,
     });
 
@@ -47,64 +41,100 @@ export const createProduct = asyncHandler(
   },
 );
 
-// [GET] /api/v1/products
-export const getProducts = asyncHandler(async (req: Request, res: Response) => {
-  const query = normalizeQueryProduct(req.query);
-  const result = await productService.findAll(query);
-  return res.status(200).json(ApiResponse.paginate(result));
-});
+// [GET] /api/v1/products - Lấy danh sách sản phẩm
+export const getProducts = asyncHandler(
+  async (req: Request, res: Response): Promise<Response> => {
+    const query = normalizeQueryProduct(req.query);
+    const result = await productService.findAll(query);
+    return res.status(200).json(ApiResponse.paginate(result));
+  },
+);
 
-// [GET] /api/v1/products/:id
-export const getProduct = asyncHandler(async (req: Request, res: Response) => {
-  const data = await productService.findById(req.params.id as string);
-  return res.status(200).json(ApiResponse.success(data));
-});
+// [GET] /api/v1/products/:id - Lấy chi tiết sản phẩm theo ID
+export const getProduct = asyncHandler(
+  async (req: Request, res: Response): Promise<Response> => {
+    const data = await productService.findById(req.params.id as string);
+    return res.status(200).json(ApiResponse.success(data));
+  },
+);
 
-// [GET] /api/v1/products/slug/:slug
+// [GET] /api/v1/products/slug/:slug - Lấy sản phẩm theo slug
 export const getProductBySlug = asyncHandler(
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<Response> => {
     const data = await productService.findBySlug(req.params.slug as string);
     return res.status(200).json(ApiResponse.success(data));
   },
 );
 
-// [PATCH] /api/v1/products/:id
+// [PATCH] /api/v1/products/:id - Cập nhật sản phẩm
 export const updateProduct = asyncHandler(
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<Response> => {
     const galleryFiles = extractFiles(req, "images");
-    const updateBody: Record<string, any> = { ...req.body };
+    const {
+      thumbnailEmpty = false,
+      deletedImageIds = [],
+      ...updateBody
+    } = req.body;
 
-    if (galleryFiles.length > 0) {
-      const existing = await productService.findById(req.params.id as string);
+    const productId = req.params.id as string;
+    const existing = await productService.findById(productId);
 
-      // Xóa ảnh cũ trên Cloudinary
+    // Cập nhật gallery images nếu có ảnh mới hoặc có ảnh bị xóa
+    if (galleryFiles.length > 0 || deletedImageIds.length > 0) {
+      // Xóa ảnh cũ đã bị xóa trên giao diện
       const oldPublicIds =
-        existing.images?.map((img: any) => img.publicId ?? img.filename) ?? [];
+        existing.images
+          ?.filter((img: any) => deletedImageIds.includes(img.id))
+          .map((img: any) => img.publicId) ?? [];
+
       if (oldPublicIds.length > 0) {
         await imageService.deleteMultiple(oldPublicIds);
       }
 
-      updateBody.images =
-        imageService.convertUploadedFilesToImages(galleryFiles);
+      // Giữ lại ảnh chưa bị xóa và thêm ảnh mới
+      const remainingImages = existing.images?.filter(
+        (img: any) => !deletedImageIds.includes(img.id),
+      );
+
+      updateBody.images = imageService.convertUploadedFilesToImages([
+        ...remainingImages,
+        ...galleryFiles,
+      ]);
     }
 
-    // Cập nhật thumbnail nếu có file mới
+    // Cập nhật thumbnail
     const [thumbnailFile] = extractFiles(req, "thumbnail");
-    if (thumbnailFile?.path) {
-      updateBody.thumbnailUrl = thumbnailFile.path;
+
+    if ((thumbnailFile?.path && thumbnailFile?.filename) || thumbnailEmpty) {
+      // Xóa thumbnail cũ nếu có
+      if (existing?.thumbnailPublicId) {
+        await imageService.deleteMultiple([existing.thumbnailPublicId]);
+      }
+
+      if (thumbnailEmpty) {
+        updateBody.thumbnailUrl = null;
+        updateBody.thumbnailPublicId = null;
+      } else {
+        updateBody.thumbnailUrl = thumbnailFile.path;
+        updateBody.thumbnailPublicId = thumbnailFile.filename;
+      }
     }
 
-    const data = await productService.update(req.params.id as string, updateBody);
+    // Thực hiện cập nhật
+    const data = await productService.update(productId, updateBody);
+
     return res
       .status(200)
-      .json(ApiResponse.success(data, "Cập nhật thành công"));
+      .json(ApiResponse.success(data, "Cập nhật sản phẩm thành công"));
   },
 );
 
-// [DELETE] /api/v1/products/:id
+// [DELETE] /api/v1/products/:id - Xóa sản phẩm
 export const deleteProduct = asyncHandler(
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response): Promise<Response> => {
     await productService.delete(req.params.id as string);
-    return res.status(200).json(ApiResponse.success(null, "Đã xóa sản phẩm"));
+    return res
+      .status(200)
+      .json(ApiResponse.success(null, "Đã xóa sản phẩm thành công"));
   },
 );

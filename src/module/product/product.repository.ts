@@ -14,34 +14,30 @@ export interface IProductRepository {
 export class ProductRepository implements IProductRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Hàm tự sinh SKU duy nhất
+  // Tạo SKU duy nhất tự động
   private async generateSKU(productName: string): Promise<string> {
-    // Lấy 3 chữ cái đầu từ tên sản phẩm (viết hoa)
+    // Lấy 3 chữ cái đầu tiên làm tiền tố
     const prefix = productName
       .substring(0, 3)
       .toUpperCase()
       .replace(/[^A-Z]/g, "");
 
-    // Lấy số lượng sản phẩm hiện tại để tạo sequential ID
+    // Đếm số sản phẩm để tạo số thứ tự
     const count = await this.prisma.product.count();
     const sequentialNum = String(count + 1).padStart(6, "0");
 
-    // Tạo SKU: PREFIX + SEQUENTIAL (e.g., "ROL000001", "HOA000002")
     let sku = `${prefix || "PRD"}${sequentialNum}`;
-
-    // Đảm bảo SKU là duy nhất (nếu trùng, thêm random suffix)
     let isUnique = false;
     let attempts = 0;
 
+    // Kiểm tra tính duy nhất, tránh trùng SKU
     while (!isUnique && attempts < 5) {
-      const exists = await this.prisma.product.count({
-        where: { sku },
-      });
+      const exists = await this.prisma.product.count({ where: { sku } });
 
       if (exists === 0) {
         isUnique = true;
       } else {
-        // Thêm random suffix nếu trùng
+        // Thêm hậu tố ngẫu nhiên nếu SKU bị trùng
         const randomSuffix = Math.random()
           .toString(36)
           .substring(2, 5)
@@ -54,11 +50,11 @@ export class ProductRepository implements IProductRepository {
     return sku;
   }
 
-  // Tạo sản phẩm mới kèm theo ảnh và danh mục
+  // Tạo sản phẩm mới với hình ảnh và danh mục
   async create(data: any): Promise<Product> {
     const { categoryIds, images, ...productData } = data;
 
-    // Tự sinh SKU nếu không được cung cấp
+    // Sinh SKU nếu không được cung cấp
     if (!productData.sku) {
       productData.sku = await this.generateSKU(productData.name);
     }
@@ -66,8 +62,7 @@ export class ProductRepository implements IProductRepository {
     return this.prisma.product.create({
       data: {
         ...productData,
-        // Lưu vào bảng trung gian product_categories
-        // Prisma tự động map productId dựa trên quan hệ đã định nghĩa
+        // Liên kết sản phẩm với danh mục
         categories: categoryIds
           ? {
               create: categoryIds.map((catId: string) => ({
@@ -75,14 +70,9 @@ export class ProductRepository implements IProductRepository {
               })),
             }
           : undefined,
-        // Lưu vào bảng product_images
-        images: images
-          ? {
-              create: images,
-            }
-          : undefined,
+        // Lưu và liên kết hình ảnh
+        images: images ? { create: images } : undefined,
       },
-      // Trả về dữ liệu kèm theo ảnh và danh mục sau khi tạo thành công
       include: {
         images: true,
         categories: true,
@@ -90,18 +80,25 @@ export class ProductRepository implements IProductRepository {
     });
   }
 
-  // Lấy danh sách sản phẩm có phân trang, tìm kiếm và lọc xóa mềm
+  // Lấy danh sách sản phẩm với phân trang và lọc
   async findAll(query: ProductQuery): Promise<IPaginatedResult<Product>> {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
 
-    // Khởi tạo điều kiện where với softDelete
     const where: Prisma.ProductWhereInput = {
-      deletedAt: null, // Chỉ lấy sản phẩm chưa bị xóa mềm
-      status: "active",
+      deletedAt: null,
     };
 
-    // Thêm filter search nếu có
+    // Lọc theo trạng thái
+    if (query.status === "all") {
+      // Bỏ qua lọc để admin xem tất cả
+    } else if (query.status) {
+      where.status = query.status;
+    } else {
+      where.status = "active";
+    }
+
+    // Tìm kiếm theo tên và SKU
     if (query.search) {
       where.OR = [
         { name: { contains: query.search, mode: "insensitive" } },
@@ -109,7 +106,7 @@ export class ProductRepository implements IProductRepository {
       ];
     }
 
-    // Thêm filter category nếu có
+    // Lọc theo danh mục
     if (query.category) {
       (where as any).categories = {
         some: {
@@ -120,23 +117,15 @@ export class ProductRepository implements IProductRepository {
       };
     }
 
-    // Thêm filter giá tối thiểu nếu có
+    // Lọc theo khoảng giá
     if (query.priceMin !== undefined) {
-      (where as any).price = {
-        ...(where as any).price,
-        gte: query.priceMin,
-      };
+      (where as any).price = { ...(where as any).price, gte: query.priceMin };
     }
-
-    // Thêm filter giá tối đa nếu có
     if (query.priceMax !== undefined) {
-      (where as any).price = {
-        ...(where as any).price,
-        lte: query.priceMax,
-      };
+      (where as any).price = { ...(where as any).price, lte: query.priceMax };
     }
 
-    // Xây dựng orderBy từ sort query
+    // Sắp xếp dữ liệu
     let orderBy: any = { createdAt: "desc" };
     switch (query.sort) {
       case "oldest":
@@ -148,12 +137,10 @@ export class ProductRepository implements IProductRepository {
       case "price-desc":
         orderBy = { price: "desc" };
         break;
-      default:
-        orderBy = { createdAt: "desc" };
-        break;
     }
 
-    const [data, total] = await Promise.all([
+    // Truy vấn song song để tối ưu hiệu năng
+    const [data, total, statusCounts] = await Promise.all([
       this.prisma.product.findMany({
         where,
         skip: (page - 1) * limit,
@@ -161,14 +148,11 @@ export class ProductRepository implements IProductRepository {
         orderBy,
         include: {
           images: { where: { isPrimary: true }, take: 1 },
-          categories: {
-            include: {
-              category: true, // Lấy chi tiết danh mục để hiển thị badge/tag ở danh sách
-            },
-          },
+          categories: { include: { category: true } },
         },
       }),
       this.prisma.product.count({ where }),
+      this.getStatusCounts(),
     ]);
 
     return {
@@ -177,42 +161,50 @@ export class ProductRepository implements IProductRepository {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+      statusCounts,
     };
   }
 
-  // Tìm chi tiết sản phẩm theo ID (Bao gồm tất cả ảnh và danh mục)
-  async findById(id: string) {
+  // Đếm số sản phẩm theo trạng thái
+  private async getStatusCounts(): Promise<Record<string, number>> {
+    const results = await this.prisma.product.groupBy({
+      by: ["status"],
+      where: { deletedAt: null },
+      _count: true,
+    });
+
+    const statusCounts: Record<string, number> = {};
+    results.forEach((result) => {
+      statusCounts[result.status] = result._count;
+    });
+
+    return statusCounts;
+  }
+
+  // Tìm sản phẩm theo ID (dành cho admin)
+  async findById(id: string): Promise<Product | null> {
     return this.prisma.product.findFirst({
       where: { id, deletedAt: null },
       include: {
-        images: { orderBy: { sortOrder: "asc" } }, // Sắp xếp ảnh theo thứ tự hiển thị
-        categories: {
-          include: {
-            category: true, // Lấy chi tiết danh mục
-          },
-        },
+        images: { orderBy: { sortOrder: "asc" } },
+        categories: { include: { category: true } },
       },
-    });
+    }) as Promise<Product | null>;
   }
 
-  // Tìm sản phẩm theo Slug (Dùng cho SEO - Chi tiết sản phẩm phía Client)
-  async findBySlug(slug: string) {
+  // Tìm sản phẩm theo slug (dành cho khách hàng)
+  async findBySlug(slug: string): Promise<Product | null> {
     return this.prisma.product.findFirst({
       where: { slug, deletedAt: null },
       include: {
         images: { orderBy: { sortOrder: "asc" } },
-        categories: {
-          include: {
-            category: true, // Lấy chi tiết danh mục
-          },
-        },
+        categories: { include: { category: true } },
       },
-    });
+    }) as Promise<Product | null>;
   }
 
-  // Cập nhật thông tin sản phẩm
-  // Tự động xóa các liên kết cũ và ghi đè mới cho Categories/Images
-  async updateById(id: string, data: any) {
+  // Cập nhật sản phẩm
+  async updateById(id: string, data: any): Promise<Product | null> {
     const { categoryIds, images, ...productData } = data;
 
     try {
@@ -220,7 +212,7 @@ export class ProductRepository implements IProductRepository {
         where: { id },
         data: {
           ...productData,
-          // Đồng bộ danh mục: Xóa liên kết cũ, thêm mới theo mảng categoryIds
+          // Đồng bộ danh mục
           categories: categoryIds
             ? {
                 deleteMany: {},
@@ -229,7 +221,7 @@ export class ProductRepository implements IProductRepository {
                 })),
               }
             : undefined,
-          // Đồng bộ ảnh: Xóa toàn bộ ảnh cũ và lưu lại bộ ảnh mới
+          // Đồng bộ hình ảnh
           images: images
             ? {
                 deleteMany: {},
@@ -243,13 +235,14 @@ export class ProductRepository implements IProductRepository {
         },
       });
     } catch (error: any) {
-      if (error.code === "P2025") return null; // Lỗi không tìm thấy bản ghi để update
+      // Bắt lỗi "Record to update not found" của Prisma
+      if (error.code === "P2025") return null;
       throw error;
     }
   }
 
-  // Xóa mềm sản phẩm bằng cách gán ngày xóa và ẩn trạng thái
-  async softDelete(id: string) {
+  // Xóa mềm sản phẩm
+  async softDelete(id: string): Promise<void> {
     await this.prisma.product.update({
       where: { id },
       data: {

@@ -9,7 +9,7 @@ import express from "express";
 import { connectRedis } from "@/config/redis";
 import "@/config/cloudinary";
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 5000;
 
 // Body parser
 app.use(express.json({ limit: "10mb" }));

@@ -71,6 +71,11 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
   // Rotate refresh token
   res.cookie("refreshToken", result.refreshToken, cookieOptions);
 
+  console.log("Response Refresh: ", {
+    accessToken: result.accessToken,
+    user: result.user,
+  });
+
   res.status(200).json({
     status: "success",
     data: {
@@ -143,10 +148,8 @@ export const resetPassword = asyncHandler(
 // POST | /api/auth/change-password
 export const changePassword = asyncHandler(
   async (req: Request, res: Response) => {
+    console.log("ChangePassword");
     const userId = getUserId(req);
-
-    console.log("ChangePassword") ;
-    console.log(userId)
 
     const { currentPassword, newPassword, confirmPassword } = req.body;
 

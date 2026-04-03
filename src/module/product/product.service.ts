@@ -4,7 +4,12 @@ import { IProductRepository } from "./product.repository";
 import { ProductResponseDto } from "./product.response";
 import { CreateProductDto, UpdateProductDto } from "./product.request";
 import { ProductQuery } from "@/module/product/product.type";
-import { getCache, setCache, deleteCache, deleteCacheByPattern } from "@/utils/cache";
+import {
+  getCache,
+  setCache,
+  deleteCache,
+  deleteCacheByPattern,
+} from "@/utils/cache";
 
 export interface IProductService {
   create(dto: CreateProductDto): Promise<ProductResponseDto>;
@@ -17,145 +22,159 @@ export interface IProductService {
 
 export class ProductService implements IProductService {
   private readonly CACHE_KEY = "products";
-  private readonly CACHE_TTL = 300; // 1 giờ
+  private readonly CACHE_TTL_LIST = 600; // 10 phút - danh sách sản phẩm (ít thay đổi)
+  private readonly CACHE_TTL_DETAIL = 900; // 15 phút - chi tiết sản phẩm (rất ít thay đổi)
+  private readonly CACHE_TTL_SEARCH = 300; // 5 phút - tìm kiếm/lọc (hay thay đổi)
 
   constructor(private readonly productRepo: IProductRepository) {}
 
-  // [POST] Tạo sản phẩm mới kèm ảnh và danh mục
+  // Tạo sản phẩm mới
   async create(dto: CreateProductDto): Promise<ProductResponseDto> {
-    // 1. Tự động tạo slug từ tên sản phẩm
+    // Tự động tạo slug chuẩn SEO từ tên sản phẩm
     const slug = slugify(dto.name, { lower: true, strict: true });
 
-    // 2. Kiểm tra trùng lặp slug trong hệ thống
+    // Kiểm tra slug có trùng lặp không
     const existed = await this.productRepo.findBySlug(slug);
     if (existed) {
       throw new AppError("Sản phẩm với tên này đã tồn tại", 400);
     }
 
-    // 3. Gọi repository để thực hiện ghi lồng (Nested Writes) vào nhiều bảng
+    // Ghi dữ liệu vào DB
     const product = await this.productRepo.create({
       ...dto,
       slug,
     });
 
-    // [Cache] Xóa cache danh sách vì dữ liệu đã thay đổi
-    await deleteCacheByPattern(`${this.CACHE_KEY}:all:*`);
+    // Xóa cache danh sách (sản phẩm mới được thêm)
+    await deleteCacheByPattern(`${this.CACHE_KEY}:list:*`);
 
     return ProductResponseDto.from(product);
   }
 
-  // [GET] Lấy danh sách sản phẩm (hỗ trợ phân trang, search, filter)
-  async findAll(query: ProductQuery) {
-    // [Cache] Tạo key dựa trên query để phân biệt các trang/bộ lọc
-    const cacheKey = `${this.CACHE_KEY}:all:${JSON.stringify(query)}`;
+  // Lấy danh sách sản phẩm (hỗ trợ phân trang, tìm kiếm, lọc)
+  async findAll(query: ProductQuery): Promise<any> {
+    // Tạo cache key từ query parameters
+    const cacheKey = `${this.CACHE_KEY}:list:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
+    // Lấy từ DB nếu không có cache
     const result = await this.productRepo.findAll(query);
-
     const response = {
       ...result,
       data: ProductResponseDto.fromList(result.data),
     };
 
-    // [Cache] Lưu dữ liệu vào redis (TTL 10 phút cho danh sách)
-    await setCache(cacheKey, response, 600);
+    // Xác định TTL dựa trên tính chất của query
+    let ttl = this.CACHE_TTL_LIST;
+    if (query.search || (query.category && query.category.length > 0)) {
+      ttl = this.CACHE_TTL_SEARCH; // Tìm kiếm/lọc: cache ngắn hơn
+    }
 
-    console.log("database query")
+    // Lưu cache
+    await setCache(cacheKey, response, ttl);
 
     return response;
   }
 
-  // [GET] Chi tiết sản phẩm theo ID (kèm full ảnh và danh mục)
+  // Lấy chi tiết sản phẩm theo ID
   async findById(id: string): Promise<ProductResponseDto> {
-    // [Cache] Kiểm tra cache trước
+    // Kiểm tra cache trước
     const cacheKey = `${this.CACHE_KEY}:id:${id}`;
     const cached = await getCache<ProductResponseDto>(cacheKey);
     if (cached) return cached;
 
+    // Lấy từ DB nếu không có trong cache
     const product = await this.productRepo.findById(id);
-
     if (!product) {
       throw new AppError("Không tìm thấy sản phẩm", 404);
     }
 
     const response = ProductResponseDto.from(product);
 
-    // [Cache] Lưu cache chi tiết (TTL 1 giờ)
-    await setCache(cacheKey, response, this.CACHE_TTL);
+    // Lưu cache (15 phút - chi tiết sản phẩm ít thay đổi)
+    await setCache(cacheKey, response, this.CACHE_TTL_DETAIL);
 
     return response;
   }
 
-  // [GET] Chi tiết sản phẩm theo Slug (kèm full ảnh và danh mục)
+  // Lấy sản phẩm theo slug (dành cho khách hàng)
   async findBySlug(slug: string): Promise<ProductResponseDto> {
-    // [Cache] Kiểm tra cache theo slug
+    // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:slug:${slug}`;
     const cached = await getCache<ProductResponseDto>(cacheKey);
     if (cached) return cached;
 
+    // Truy vấn từ DB
     const product = await this.productRepo.findBySlug(slug);
-
     if (!product) {
       throw new AppError("Không tìm thấy sản phẩm", 404);
     }
 
     const response = ProductResponseDto.from(product);
 
-    // [Cache] Lưu cache chi tiết
-    await setCache(cacheKey, response, this.CACHE_TTL);
+    // Cập nhật cache (15 phút - chi tiết sản phẩm ít thay đổi)
+    await setCache(cacheKey, response, this.CACHE_TTL_DETAIL);
 
     return response;
   }
 
-  // [PATCH] Cập nhật thông tin sản phẩm
+  // Cập nhật sản phẩm
   async update(id: string, dto: UpdateProductDto): Promise<ProductResponseDto> {
-    // 1. Kiểm tra sự tồn tại của sản phẩm
+    // Kiểm tra sản phẩm có tồn tại
     const exists = await this.productRepo.findById(id);
     if (!exists) {
       throw new AppError("Sản phẩm không tồn tại", 404);
     }
 
-    // 2. Nếu người dùng đổi tên, cập nhật lại slug mới
     const updateData: any = { ...dto };
+
+    // Cập nhật slug nếu tên sản phẩm thay đổi
     if (dto.name) {
       updateData.slug = slugify(dto.name, { lower: true, strict: true });
     }
 
-    // 3. Thực hiện cập nhật đồng bộ qua Repository
+    // Thực hiện cập nhật
     const updated = await this.productRepo.updateById(id, updateData);
     if (!updated) {
       throw new AppError("Cập nhật sản phẩm thất bại", 500);
     }
 
-    // [Cache] Xóa các cache liên quan để đảm bảo dữ liệu mới
-    await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${id}`),
-      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
-      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`), // Xóa cache danh sách chung
-    ]);
+    // Xóa cache liên quan
+    const cacheInvalidations = [
+      deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
+      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Cache chi tiết slug cũ
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:*`), // Cache danh sách (giá/thông tin thay đổi)
+    ];
+
+    // Nếu slug thay đổi, xóa cache slug mới
+    if (dto.name) {
+      cacheInvalidations.push(
+        deleteCache(`${this.CACHE_KEY}:slug:${updateData.slug}`),
+      );
+    }
+
+    await Promise.all(cacheInvalidations);
 
     return ProductResponseDto.from(updated);
   }
 
-  // [DELETE] Xóa mềm sản phẩm (Soft Delete)
+  // Xóa mềm sản phẩm
   async delete(id: string): Promise<void> {
-    // 1. Kiểm tra sản phẩm trước khi thực hiện xóa
+    // Kiểm tra sản phẩm có tồn tại
     const exists = await this.productRepo.findById(id);
     if (!exists) {
       throw new AppError("Sản phẩm không tồn tại để xóa", 404);
     }
 
-    // 2. Gọi Repo để gán deletedAt và chuyển trạng thái sang hidden
+    // Đánh dấu xóa mềm
     await this.productRepo.softDelete(id);
 
-    // [Cache] Xóa sạch các cache liên quan sau khi xóa sản phẩm
+    // Xóa cache liên quan
     await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${id}`),
-      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`),
-      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),
+      deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
+      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Cache chi tiết slug
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:*`), // Cache danh sách (bị ảnh hưởng bởi xóa)
     ]);
   }
 }

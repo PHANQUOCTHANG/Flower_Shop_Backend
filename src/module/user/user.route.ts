@@ -9,20 +9,20 @@ import {
 
 const router = Router();
 
-// Route collection
+// GET danh sách & POST tạo user
 router
   .route("/")
   .get(userCtrl.getUsers)
   .post(validationMiddleware(CreateUserSchema), userCtrl.createUser);
 
-// Route theo ID
+// GET chi tiết & PATCH cập nhật & DELETE xóa
 router
   .route("/:id")
   .get(validationMiddleware(IdParamSchema, "params"), userCtrl.getUser)
   .patch(
     validationMiddleware(IdParamSchema, "params"),
     validationMiddleware(UpdateUserSchema),
-    userCtrl.updateUser
+    userCtrl.updateUser,
   )
   .delete(validationMiddleware(IdParamSchema, "params"), userCtrl.deleteUser);
 

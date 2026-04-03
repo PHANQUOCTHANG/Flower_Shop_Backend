@@ -1,9 +1,6 @@
 import { User, UserRole, AuthProvider } from "@prisma/client";
 
-/**
- * DTO trả về cho client
- * Không expose password
- */
+// DTO trả về cho client (không expose password)
 export class UserResponseDto {
   id: string;
   fullName: string;
@@ -33,11 +30,13 @@ export class UserResponseDto {
     this.updatedAt = user.updatedAt.toISOString();
   }
 
-  static from(user: User) {
+  // Chuyển đổi một user thành DTO
+  static from(user: User): UserResponseDto {
     return new UserResponseDto(user);
   }
 
-  static fromList(users: User[]) {
+  // Chuyển đổi danh sách users thành DTO
+  static fromList(users: User[]): UserResponseDto[] {
     return users.map((u) => new UserResponseDto(u));
   }
 }

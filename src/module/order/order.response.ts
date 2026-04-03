@@ -1,5 +1,6 @@
 import { Order, OrderItem, Product, User } from "@prisma/client";
 
+// Ánh xạ DTO đơn hàng
 export class OrderResponseDto {
   id: string;
   totalPrice: number;
@@ -13,7 +14,7 @@ export class OrderResponseDto {
   createdAt: string;
   updatedAt: string;
 
-  // Quan hệ được định nghĩa rõ ràng hơn
+  // Thông tin chi tiết
   items: OrderItemDetailDto[];
   user?: UserBriefDto;
 
@@ -30,12 +31,12 @@ export class OrderResponseDto {
     this.createdAt = order.createdAt.toISOString();
     this.updatedAt = order.updatedAt.toISOString();
 
-    // Map danh sách sản phẩm trong đơn
-    this.items = order.items 
-      ? order.items.map((item: any) => new OrderItemDetailDto(item)) 
+    // Ánh xạ danh sách items
+    this.items = order.items
+      ? order.items.map((item: any) => new OrderItemDetailDto(item))
       : [];
 
-    // Map thông tin user (thường cho Admin)
+    // Thông tin khách hàng (admin)
     if (order.user) {
       this.user = {
         id: order.user.id,
@@ -54,9 +55,7 @@ export class OrderResponseDto {
   }
 }
 
-/**
- * DTO phụ cho chi tiết từng sản phẩm trong đơn hàng
- */
+// DTO chi tiết item
 class OrderItemDetailDto {
   id: string;
   productId: string;
@@ -69,7 +68,6 @@ class OrderItemDetailDto {
   constructor(item: any) {
     this.id = item.id;
     this.productId = item.productId;
-    // Lấy thông tin từ snapshot hoặc relation
     this.productName = item.product?.name || "Sản phẩm không còn tồn tại";
     this.thumbnail = item.product?.thumbnailUrl || null;
     this.quantity = item.quantity;
@@ -78,9 +76,7 @@ class OrderItemDetailDto {
   }
 }
 
-/**
- * DTO phụ cho thông tin User rút gọn
- */
+// User brief info DTO
 interface UserBriefDto {
   id: string;
   fullName: string;
