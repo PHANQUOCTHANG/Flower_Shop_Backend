@@ -13,7 +13,7 @@ export interface IOrderRepository {
 export class OrderRepository implements IOrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Tạo đơn hàng kèm items (transaction)
+  // Tạo đơn hàng
   async createOrder(data: {
     userId: string;
     totalPrice: number;

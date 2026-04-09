@@ -9,6 +9,7 @@ export interface IProductRepository {
   findBySlug(slug: string): Promise<Product | null>;
   updateById(id: string, data: any): Promise<Product | null>;
   softDelete(id: string): Promise<void>;
+  findGroupedByCategory(limit: number): Promise<{category: any, products: Product[]}[]>;
 }
 
 export class ProductRepository implements IProductRepository {
@@ -251,4 +252,42 @@ export class ProductRepository implements IProductRepository {
       },
     });
   }
+
+  // Lấy danh sách sản phẩm gom theo danh mục
+  async findGroupedByCategory(limit: number = 20): Promise<{category: any, products: Product[]}[]> {
+    // 1. Lấy tất cả danh mục đang hoạt động (có thể chỉ lấy những danh mục có sản phẩm tùy rules, bài này lấy hết)
+    const categories = await this.prisma.category.findMany({
+      orderBy: { createdAt: "desc" }
+    });
+
+    // 2. Fetch parallel top X products cho mỗi category
+    const results = await Promise.all(
+      categories.map(async (category) => {
+        const products = await this.prisma.product.findMany({
+          where: {
+            deletedAt: null,
+            status: "active",
+            categories: {
+              some: { categoryId: category.id }
+            }
+          },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+          include: {
+            images: { where: { isPrimary: true }, take: 1 },
+            categories: { include: { category: true } }
+          }
+        });
+
+        return {
+          category,
+          products
+        };
+      })
+    );
+
+    // Xóa các mảng trống để giao diện mượt
+    return results.filter(group => group.products.length > 0);
+  }
 }
+

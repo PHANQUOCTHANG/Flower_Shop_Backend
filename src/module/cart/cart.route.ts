@@ -2,7 +2,6 @@ import { Router } from "express";
 import * as cartController from "./cart.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
 import { addToCartSchema, updateQuantitySchema } from "./cart.request";
-import { requireAuth } from "@/middleware/auth.middleware";
 
 const router = Router();
 

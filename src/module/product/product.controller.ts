@@ -58,6 +58,16 @@ export const getProduct = asyncHandler(
   },
 );
 
+// [GET] /api/v1/products/grouped-by-category - Lấy sản phẩm gom theo danh mục
+export const getProductsGroupedByCategory = asyncHandler(
+  async (req: Request, res: Response): Promise<Response> => {
+    const limit = parseInt(req.query.limit as string) || 20;
+    const data = await productService.findGroupedByCategory(limit);
+    return res.status(200).json(ApiResponse.success(data));
+  },
+);
+
+
 // [GET] /api/v1/products/slug/:slug - Lấy sản phẩm theo slug
 export const getProductBySlug = asyncHandler(
   async (req: Request, res: Response): Promise<Response> => {

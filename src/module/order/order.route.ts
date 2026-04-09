@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as orderCtrl from "./order.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
 import { CheckoutSchema, UpdateOrderStatusSchema } from "./order.request";
+import { checkoutRateLimiter } from "@/middleware/rateLimiter.middleware";
 
 const router = Router();
 
@@ -9,7 +10,11 @@ const router = Router();
 router
   .route("/")
   .get(orderCtrl.getAllOrders)
-  .post(validationMiddleware(CheckoutSchema), orderCtrl.checkout);
+  .post(
+    checkoutRateLimiter,
+    validationMiddleware(CheckoutSchema),
+    orderCtrl.checkout,
+  );
 
 // GET danh sách khách hàng
 router.route("/customers/list").get(orderCtrl.getAllCustomers);

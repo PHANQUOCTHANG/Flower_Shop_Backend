@@ -45,6 +45,8 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Mật khẩu không được để trống"),
   // Quyền người dùng - mặc định là CUSTOMER
   role: UserRoleEnum.default("CUSTOMER").optional(),
+  // Ghi nhớ đăng nhập: true = refreshToken 14 ngày, false = 24 giờ
+  rememberMe: z.boolean().default(false).optional(),
 });
 
 // Request làm mới Access Token

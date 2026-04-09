@@ -32,8 +32,7 @@ export interface IAuthService {
 export class AuthService implements IAuthService {
   private readonly CACHE_KEY_REFRESH = "auth:refresh:";
   private readonly CACHE_KEY_BLACKLIST = "auth:blacklist:";
-  private readonly CACHE_TTL_REFRESH = 7 * 24 * 60 * 60; // 7 ngày - Refresh token (match JWT expiry)
-  private readonly CACHE_TTL_OTP = 300; // 5 phút - OTP verification (bảo mật, code tạm)
+  private readonly CACHE_TTL_OTP = 300; // 5 phút - OTP verification
 
   constructor(
     private readonly userRepo: IUserRepository,
@@ -54,7 +53,8 @@ export class AuthService implements IAuthService {
       role: dto.role || "CUSTOMER",
     });
 
-    const result = await this.generateAuthResult(user);
+    // Đăng ký mới không có remember me, mặc định 24h
+    const result = await this.generateAuthResult(user, false);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
@@ -76,7 +76,7 @@ export class AuthService implements IAuthService {
     if (!user.isActive)
       throw new AppError("Tài khoản đã bị khóa hoặc chưa kích hoạt", 403);
 
-    const result = await this.generateAuthResult(user);
+    const result = await this.generateAuthResult(user, dto.rememberMe || false);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
@@ -86,7 +86,6 @@ export class AuthService implements IAuthService {
 
   // Làm mới Access Token (Token Rotation + Redis Cache)
   async refresh(refreshToken: string): Promise<AuthResponseDto> {
-    console.log("RefreshToken: ", refreshToken);
     if (!refreshToken) throw new AppError("Không tìm thấy Refresh Token", 401);
 
     // 1. Kiểm tra Redis trước - Cache refresh token (7 ngày)
@@ -96,9 +95,7 @@ export class AuthService implements IAuthService {
     // 2. Nếu không có cache, kiểm tra database (fallback)
     if (!userId) {
       const stored = await this.refreshRepo.findValid(refreshToken);
-      console.log(stored);
       if (!stored) {
-        console.log("OOKKKK");
         throw new AppError("Phiên làm việc hết hạn", 401);
       }
       userId = stored.userId;
@@ -167,7 +164,8 @@ export class AuthService implements IAuthService {
       deleteCache(`otp:${dto.email}`), // Xóa OTP cache (5 phút)
     ]);
 
-    const result = await this.generateAuthResult(user);
+    // Reset password sau khi quên, mặc định 24h
+    const result = await this.generateAuthResult(user, false);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
@@ -208,7 +206,10 @@ export class AuthService implements IAuthService {
   }
 
   // Tạo JWT và lưu vào song song DB & Redis
-  private async generateAuthResult(user: any): Promise<AuthResult> {
+  private async generateAuthResult(
+    user: any,
+    rememberMe: boolean = false,
+  ): Promise<AuthResult> {
     const accessSecret = process.env.JWT_SECRET;
     const refreshSecret = process.env.JWT_REFRESH_SECRET;
     if (!accessSecret || !refreshSecret)
@@ -217,28 +218,32 @@ export class AuthService implements IAuthService {
     const userIdStr = user.id.toString();
 
     const accessToken = jwt.sign(
-      { sub: userIdStr, role: user.role },
+      { userId: userIdStr, role: user.role },
       accessSecret,
       { expiresIn: "15m" },
     );
 
-    const refreshToken = jwt.sign({ sub: userIdStr }, refreshSecret, {
-      expiresIn: "7d",
+    // Xác định thời hạn refreshToken dựa trên rememberMe
+    const refreshTokenExpiry = rememberMe ? "14d" : "1d";
+    const refreshTokenTTL = rememberMe
+      ? 14 * 24 * 60 * 60 * 1000 // 14 ngày (ms)
+      : 24 * 60 * 60 * 1000; // 24 giờ (ms)
+
+    const refreshToken = jwt.sign({ userId: userIdStr }, refreshSecret, {
+      expiresIn: refreshTokenExpiry,
     });
 
-    // Lưu refresh token vào cả DB và Redis (7 ngày - match JWT expiry)
-    // Redis: nhanh lookup khi refresh token
-    // DB: fallback + lưu trữ lâu dài
+    // Lưu refresh token vào cả DB và Redis với TTL tương ứng
     await Promise.all([
       this.refreshRepo.createOrUpdate({
         userId: userIdStr,
         token: refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + refreshTokenTTL),
       }),
       setCache(
         `${this.CACHE_KEY_REFRESH}${refreshToken}`,
         userIdStr,
-        this.CACHE_TTL_REFRESH,
+        Math.floor(refreshTokenTTL / 1000), // Convert ms to seconds for Redis TTL
       ),
     ]);
 

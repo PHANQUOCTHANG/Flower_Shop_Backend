@@ -101,7 +101,7 @@ export class OtpService implements IOtpService {
 
     const resetToken = jwt.sign(
       {
-        sub: user.id,
+        userId: user.id,
         email: user.email,
         scope: "reset_password",
       },

@@ -1,18 +1,56 @@
 import { Request, Response } from "express";
-import { orderService } from "@/config/container";
+import { cartService, orderService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
 import { normalizeQuery } from "@/utils/query";
 import asyncHandler from "@/utils/asyncHandler";
 import { getUserId } from "@/helpers/getUserId";
 import { normalizeQueryOrder } from "@/module/order/order.type";
 
-// [POST] /api/v1/orders - Đặt hàng
+// src/module/order/order.controller.ts
+import { orderQueue } from "@/config/queue";
+import AppError from "@/utils/appError";
+
 export const checkout = asyncHandler(async (req: Request, res: Response) => {
   const userId = getUserId(req);
-  const data = await orderService.checkout(userId, req.body);
 
-  return res.status(201).json(ApiResponse.success(data, "Đặt hàng thành công"));
+  // Kiểm tra cart sớm để không đưa job rỗng vào queue
+  const cart = await cartService.getCart(userId);
+  if (!cart || cart.items.length === 0) {
+    throw new AppError("Giỏ hàng của bạn đang trống", 400);
+  }
+
+  // Đưa job vào queue, KHÔNG chờ kết quả
+  const job = await orderQueue.add(
+    "process-checkout",
+    {
+      userId,
+      dto: req.body,
+      cartId: cart.id,
+    },
+    {
+      // Deduplicate: cùng user không được có 2 job pending cùng lúc
+      jobId: `checkout:${userId}:${Date.now()}`,
+    },
+  );
+
+  // Trả về ngay 202 — client dùng jobId để track qua WebSocket
+  return res.status(202).json({
+    success: true,
+    message: "Đơn hàng đang được xử lý",
+    data: {
+      jobId: job.id,
+      status: "queued",
+    },
+  });
 });
+
+// [POST] /api/v1/orders - Đặt hàng
+// export const checkout = asyncHandler(async (req: Request, res: Response) => {
+//   const userId = getUserId(req);
+//   const data = await orderService.checkout(userId, req.body);
+
+//   return res.status(201).json(ApiResponse.success(data, "Đặt hàng thành công"));
+// });
 
 // [GET] /api/v1/orders/me - Lịch sử đơn hàng
 export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {

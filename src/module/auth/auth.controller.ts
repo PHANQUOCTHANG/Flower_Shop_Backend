@@ -16,8 +16,9 @@ const cookieOptions = {
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
 
-  // Lưu refresh token vào cookie
+  // Chỉ lưu refreshToken vào cookie (httpOnly, không thể đọc từ JS)
   res.cookie("refreshToken", result.refreshToken, cookieOptions);
+  // accessToken KHÔNG lưu vào cookie — chỉ trả về body để Zustand (localStorage) lưu
 
   res.status(201).json({
     status: "success",
@@ -30,14 +31,13 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
 // POST | /api/auth/login
 export const login = asyncHandler(async (req: Request, res: Response) => {
-  console.log("login", req.body);
   const result = await authService.login(req.body);
 
-  // Lưu refresh token
+  // Chỉ lưu refreshToken vào cookie (httpOnly, không thể đọc từ JS)
   res.cookie("refreshToken", result.refreshToken, cookieOptions);
+  // accessToken KHÔNG lưu vào cookie — chỉ trả về body để Zustand (localStorage) lưu
 
-  console.log(result.user);
-  // lưu user vào cookie dưới dạng chuỗi JSON
+  // Lưu user vào cookie để middleware đọc role (non-httpOnly)
   res.cookie("user", JSON.stringify(result.user), {
     httpOnly: false,
     path: "/",
@@ -56,7 +56,6 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
 // POST | /api/auth/refresh
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
-  console.log("refresh", req.cookies);
   const refreshToken = req.cookies?.refreshToken;
 
   if (!refreshToken) {
@@ -68,13 +67,9 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await authService.refresh(refreshToken);
 
-  // Rotate refresh token
+  // Chỉ lưu refreshToken vào cookie (httpOnly, không thể đọc từ JS)
   res.cookie("refreshToken", result.refreshToken, cookieOptions);
-
-  console.log("Response Refresh: ", {
-    accessToken: result.accessToken,
-    user: result.user,
-  });
+  // accessToken KHÔNG lưu vào cookie — chỉ trả về body
 
   res.status(200).json({
     status: "success",
@@ -93,9 +88,8 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     await authService.logout(refreshToken);
   }
 
-  res.clearCookie("refreshToken", {
-    path: "/",
-  });
+  res.clearCookie("refreshToken", { path: "/" });
+  res.clearCookie("user", { path: "/" });
 
   res.status(204).json({
     status: "success",
@@ -148,7 +142,6 @@ export const resetPassword = asyncHandler(
 // POST | /api/auth/change-password
 export const changePassword = asyncHandler(
   async (req: Request, res: Response) => {
-    console.log("ChangePassword");
     const userId = getUserId(req);
 
     const { currentPassword, newPassword, confirmPassword } = req.body;

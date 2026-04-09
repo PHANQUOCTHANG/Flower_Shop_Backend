@@ -18,6 +18,7 @@ export interface IProductService {
   findBySlug(slug: string): Promise<ProductResponseDto>;
   update(id: string, dto: UpdateProductDto): Promise<ProductResponseDto>;
   delete(id: string): Promise<void>;
+  findGroupedByCategory(limit: number): Promise<any>;
 }
 
 export class ProductService implements IProductService {
@@ -103,7 +104,9 @@ export class ProductService implements IProductService {
     // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:slug:${slug}`;
     const cached = await getCache<ProductResponseDto>(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     // Truy vấn từ DB
     const product = await this.productRepo.findBySlug(slug);
@@ -175,6 +178,24 @@ export class ProductService implements IProductService {
       deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Cache chi tiết slug
       deleteCacheByPattern(`${this.CACHE_KEY}:list:*`), // Cache danh sách (bị ảnh hưởng bởi xóa)
+      deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`), // Xóa luôn grouped cache
     ]);
+  }
+
+  // Lấy sản phẩm nhóm theo danh mục
+  async findGroupedByCategory(limit: number): Promise<any> {
+    const cacheKey = `${this.CACHE_KEY}:grouped:${limit}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.productRepo.findGroupedByCategory(limit);
+    
+    const response = result.map(group => ({
+      category: group.category,
+      products: ProductResponseDto.fromList(group.products)
+    }));
+
+    await setCache(cacheKey, response, this.CACHE_TTL_LIST);
+    return response;
   }
 }

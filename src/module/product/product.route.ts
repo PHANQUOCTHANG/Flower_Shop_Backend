@@ -26,6 +26,9 @@ router
 // GET sản phẩm theo slug
 router.route("/slug/:slug").get(productCtrl.getProductBySlug);
 
+// GET sản phẩm nhóm theo danh mục
+router.route("/grouped-by-category").get(productCtrl.getProductsGroupedByCategory);
+
 // GET, PATCH, DELETE sản phẩm theo ID
 router
   .route("/:id")
