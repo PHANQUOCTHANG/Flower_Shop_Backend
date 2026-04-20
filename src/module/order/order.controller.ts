@@ -4,12 +4,12 @@ import { ApiResponse } from "@/utils/apiResponse";
 import { normalizeQuery } from "@/utils/query";
 import asyncHandler from "@/utils/asyncHandler";
 import { getUserId } from "@/helpers/getUserId";
-import { normalizeQueryOrder } from "@/module/order/order.type";
+import { normalizeQueryOrder, OrderQuery } from "@/module/order/order.type";
 
-// src/module/order/order.controller.ts
 import { orderQueue } from "@/config/queue";
 import AppError from "@/utils/appError";
 
+// [POST] /api/v1/orders - Đặt hàng
 export const checkout = asyncHandler(async (req: Request, res: Response) => {
   const userId = getUserId(req);
 
@@ -44,17 +44,9 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-// [POST] /api/v1/orders - Đặt hàng
-// export const checkout = asyncHandler(async (req: Request, res: Response) => {
-//   const userId = getUserId(req);
-//   const data = await orderService.checkout(userId, req.body);
-
-//   return res.status(201).json(ApiResponse.success(data, "Đặt hàng thành công"));
-// });
-
 // [GET] /api/v1/orders/me - Lịch sử đơn hàng
 export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
-  const query = normalizeQueryOrder(req.query);
+  const query: OrderQuery  = normalizeQueryOrder(req.query);
   const userId = getUserId(req);
   const result = await orderService.findByUserId(userId, query);
 
@@ -75,7 +67,7 @@ export const getOrderDetail = asyncHandler(
 // [GET] /api/v1/orders - Danh sách đơn hàng (admin)
 export const getAllOrders = asyncHandler(
   async (req: Request, res: Response) => {
-    const query = normalizeQueryOrder(req.query);
+    const query : OrderQuery = normalizeQueryOrder(req.query);
     const result = await orderService.findAll(query);
 
     return res.status(200).json(ApiResponse.paginate(result));
@@ -87,7 +79,7 @@ export const getAllCustomers = asyncHandler(
   async (req: Request, res: Response) => {
     const query = normalizeQuery(req.query);
     const result = await orderService.findAllCustomers(query);
-
+    console.log("Customer list:", result);
     return res.status(200).json(ApiResponse.paginate(result));
   },
 );

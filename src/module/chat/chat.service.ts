@@ -4,6 +4,7 @@ import { MessageResponseDto, ChatResponseDto } from "./chat.response";
 import { SendMessageDto } from "./chat.request";
 import { getIO } from "@/config/socket";
 import { getCache, setCache, deleteCacheByPattern } from "@/utils/cache";
+import { BaseQuery } from "@/utils/query";
 
 export interface IChatService {
   userSendMessage(
@@ -15,7 +16,7 @@ export interface IChatService {
     chatId: string,
     dto: SendMessageDto,
   ): Promise<MessageResponseDto>;
-  getAdminChatList(query: any): Promise<any>;
+  getAdminChatList(query: BaseQuery): Promise<any>;
   getChatHistory(chatId: string, query: any): Promise<any>;
   getMyChat(userId: string): Promise<ChatResponseDto>;
 }
@@ -88,7 +89,7 @@ export class ChatService implements IChatService {
     return response;
   }
 
-  async getAdminChatList(query: any) {
+  async getAdminChatList(query: BaseQuery) {
     const cacheKey = `${this.CACHE_KEY}:admin:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
     if (cached) return cached;

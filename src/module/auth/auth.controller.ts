@@ -3,22 +3,29 @@ import { getUserId } from "@/helpers/getUserId";
 import asyncHandler from "@/utils/asyncHandler";
 import { Request, Response } from "express";
 
-// Cookie config dùng chung
-const cookieOptions = {
-  httpOnly: true, // Bảo mật, JS không đọc được
+// Cookie config dùng chung — expires đồng bộ với token thực tế
+const buildCookieOptions = (expiresAt: Date) => ({
+  httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-};
+  expires: expiresAt, // Browser tự xóa đúng lúc token hết hạn
+});
 
 // POST | /api/auth/register
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
 
-  // Chỉ lưu refreshToken vào cookie (httpOnly, không thể đọc từ JS)
-  res.cookie("refreshToken", result.refreshToken, cookieOptions);
-  // accessToken KHÔNG lưu vào cookie — chỉ trả về body để Zustand (localStorage) lưu
+  res.cookie(
+    "refreshToken",
+    result.refreshToken,
+    buildCookieOptions(result.refreshTokenExpiresAt),
+  );
+  res.cookie("user", JSON.stringify(result.user), {
+    httpOnly: false,
+    path: "/",
+    expires: result.refreshTokenExpiresAt, // user cookie cùng vòng đời với refreshToken
+  });
 
   res.status(201).json({
     status: "success",
@@ -33,16 +40,15 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.login(req.body);
 
-  // Chỉ lưu refreshToken vào cookie (httpOnly, không thể đọc từ JS)
-  res.cookie("refreshToken", result.refreshToken, cookieOptions);
-  // accessToken KHÔNG lưu vào cookie — chỉ trả về body để Zustand (localStorage) lưu
-
-  // Lưu user vào cookie để middleware đọc role (non-httpOnly)
+  res.cookie(
+    "refreshToken",
+    result.refreshToken,
+    buildCookieOptions(result.refreshTokenExpiresAt),
+  );
   res.cookie("user", JSON.stringify(result.user), {
     httpOnly: false,
     path: "/",
-    // Thêm maxAge để cookie không bị mất khi đóng trình duyệt (tùy chọn)
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+    expires: result.refreshTokenExpiresAt,
   });
 
   res.status(200).json({
@@ -67,9 +73,16 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await authService.refresh(refreshToken);
 
-  // Chỉ lưu refreshToken vào cookie (httpOnly, không thể đọc từ JS)
-  res.cookie("refreshToken", result.refreshToken, cookieOptions);
-  // accessToken KHÔNG lưu vào cookie — chỉ trả về body
+  res.cookie(
+    "refreshToken",
+    result.refreshToken,
+    buildCookieOptions(result.refreshTokenExpiresAt),
+  );
+  res.cookie("user", JSON.stringify(result.user), {
+    httpOnly: false,
+    path: "/",
+    expires: result.refreshTokenExpiresAt,
+  });
 
   res.status(200).json({
     status: "success",
@@ -126,11 +139,7 @@ export const resetPassword = asyncHandler(
   async (req: Request, res: Response) => {
     const { email, otp, newPassword } = req.body;
 
-    await authService.resetPassword({
-      email,
-      otp,
-      newPassword,
-    });
+    await authService.resetPassword({ email, otp, newPassword });
 
     res.status(204).json({
       status: "success",
@@ -143,7 +152,6 @@ export const resetPassword = asyncHandler(
 export const changePassword = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
-
     const { currentPassword, newPassword, confirmPassword } = req.body;
 
     await authService.changePassword(userId, {

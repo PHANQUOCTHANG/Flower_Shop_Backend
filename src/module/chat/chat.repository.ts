@@ -1,3 +1,4 @@
+import { BaseQuery } from "@/utils/query";
 import { PrismaClient, Chat, Message } from "@prisma/client";
 
 // Định nghĩa Interface cho Repository
@@ -10,7 +11,7 @@ export interface IChatRepository {
     content: string;
   }): Promise<Message>;
   getMessages(chatId: string, query: any): Promise<any>;
-  findAll(query: any): Promise<any>;
+  findAll(query: BaseQuery): Promise<any>;
   findById(chatId: string): Promise<Chat | null>;
 }
 
@@ -97,7 +98,7 @@ export class ChatRepository implements IChatRepository {
   }
 
   // Danh sách chat dành cho Admin
-  async findAll(query: any) {
+  async findAll(query: BaseQuery) {
     const page = Math.max(Number(query.page) || 1, 1);
     const limit = 10;
 

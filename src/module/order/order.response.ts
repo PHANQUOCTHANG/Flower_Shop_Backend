@@ -61,6 +61,7 @@ class OrderItemDetailDto {
   productId: string;
   productName: string;
   thumbnail: string | null;
+  productSlug: string; // Renamed from slug → productSlug
   quantity: number;
   price: number;
   subtotal: number;
@@ -70,6 +71,7 @@ class OrderItemDetailDto {
     this.productId = item.productId;
     this.productName = item.product?.name || "Sản phẩm không còn tồn tại";
     this.thumbnail = item.product?.thumbnailUrl || null;
+    this.productSlug = item.product?.slug || ""; // Lấy từ product nested object
     this.quantity = item.quantity;
     this.price = Number(item.price);
     this.subtotal = Number(item.subtotal);

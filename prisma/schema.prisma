@@ -80,6 +80,7 @@ model User {
   refreshTokens RefreshToken[]
   cart          Cart?
   orders        Order[]
+  addresses     Address[]
 
   // Thêm quan hệ cho Chat
   chats      Chat[]    @relation("UserChats")
@@ -305,4 +306,32 @@ model Message {
 
   @@map("messages")
   @@index([chatId])
+}
+
+model Address {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  name              String   @db.Text // Tên người nhận
+  phone             String   @db.VarChar(20) // Số điện thoại nhận hàng
+  
+  // Chi tiết địa chỉ (Lưu cả code và name)
+  provinceCode      String   @map("province_code") @db.VarChar(10)
+  provinceName      String   @map("province_name") @db.VarChar(100)
+  districtCode      String   @map("district_code") @db.VarChar(10)
+  districtName      String   @map("district_name") @db.VarChar(100)
+  wardCode          String   @map("ward_code") @db.VarChar(10)
+  wardName          String   @map("ward_name") @db.VarChar(100)
+  streetDetail      String   @map("street_detail") @db.Text
+  
+  // Logic quản lý địa chỉ
+  isDefault         Boolean  @default(false) @map("is_default")
+  
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  
+  // Quan hệ
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("addresses")
+  @@index([userId])
 }

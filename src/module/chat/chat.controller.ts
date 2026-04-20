@@ -3,6 +3,7 @@ import { chatService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
 import asyncHandler from "@/utils/asyncHandler";
 import { getUserId } from "@/helpers/getUserId";
+import { BaseQuery, normalizeQuery } from "@/utils/query";
 
 // [POST] /api/v1/chats/me/messages
 // Khách hàng gửi tin nhắn vào cuộc hội thoại của chính mình
@@ -30,7 +31,7 @@ export const adminSendMessage = asyncHandler(async (req: Request, res: Response)
 // [GET] /api/v1/chats/admin/list
 // Admin lấy danh sách tất cả các cuộc hội thoại (Inbox list)
 export const getAdminChatList = asyncHandler(async (req: Request, res: Response) => {
-  const query = req.query;
+  const query : BaseQuery = normalizeQuery(req.query);
   const result = await chatService.getAdminChatList(query);
 
   return res

@@ -31,7 +31,7 @@ export function globalErrorHandler(
     logger.error(error);
   }
 
-  const statusCode = error.statusCode || 200; 
+  const statusCode = error.statusCode || 500; 
   const isDev = process.env.NODE_ENV === "development";
 
   // DEV: trả full thông tin để debug

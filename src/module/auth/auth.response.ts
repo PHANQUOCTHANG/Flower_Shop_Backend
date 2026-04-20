@@ -2,22 +2,28 @@ import { UserRole } from "@prisma/client";
 
 // DTO phản hồi sau khi đăng nhập hoặc làm mới token thành công
 export class AuthResponseDto {
-  accessToken: string; // JWT ngắn hạn (ví dụ: 15p)
-  refreshToken: string; // JWT dài hạn (ví dụ: 7 ngày)
+  accessToken: string;
+  refreshToken: string;
+  refreshTokenExpiresAt: Date; // Thời điểm hết hạn để controller set cookie chính xác
 
   user: {
-    id: string; // Chuyển BigInt id sang string
+    id: string;
     fullName: string;
     email: string;
-    role: UserRole; // Sử dụng enum trực tiếp từ Prisma
+    role: UserRole;
     avatar?: string | null;
   };
 
-  constructor(user: any, accessToken: string, refreshToken: string) {
+  constructor(
+    user: any,
+    accessToken: string,
+    refreshToken: string,
+    refreshTokenExpiresAt: Date,
+  ) {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
+    this.refreshTokenExpiresAt = refreshTokenExpiresAt;
 
-    // Map dữ liệu từ bản ghi database sang định dạng response
     this.user = {
       id: user.id,
       fullName: user.fullName,
@@ -27,12 +33,12 @@ export class AuthResponseDto {
     };
   }
 
-  // Hàm static để tạo response nhanh gọn
   static from(
     user: any,
     accessToken: string,
     refreshToken: string,
+    refreshTokenExpiresAt: Date,
   ): AuthResponseDto {
-    return new AuthResponseDto(user, accessToken, refreshToken);
+    return new AuthResponseDto(user, accessToken, refreshToken, refreshTokenExpiresAt);
   }
 }

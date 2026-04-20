@@ -1,12 +1,13 @@
 import { Server } from "socket.io";
 import { Server as HttpServer } from "http";
 import { verifyToken } from "@/utils/jwt";
+import logger from "@/utils/logger";
 
 let io: Server;
 
 export const initSocket = (httpServer: HttpServer) => {
   const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
-  console.log("[Socket] Initializing with CORS origin:", clientUrl);
+  logger.info(`[Socket] Initializing with CORS origin: ${clientUrl}`);
 
   io = new Server(httpServer, {
     cors: {
@@ -24,10 +25,10 @@ export const initSocket = (httpServer: HttpServer) => {
       const payload = verifyToken(token);
       socket.data.userId = payload.userId;
       socket.data.role = payload.role;
-      console.log("[Socket Auth] User authenticated:", payload.userId);
+
       next();
     } catch (error) {
-      console.error("[Socket Auth] Auth failed:", error);
+      logger.error(`[Socket Auth] Auth failed: ${error}`);
       next(new Error("Unauthorized"));
     }
   });
@@ -43,23 +44,21 @@ export const initSocket = (httpServer: HttpServer) => {
       socket.join("chat:admin");
     }
 
-    console.log(
-      `[Socket] Connected: ${userId} | role: ${role} | id: ${socket.id}`,
-    );
+    logger.info(`[Socket] Connected: ${userId} | role: ${role} | id: ${socket.id}`);
 
     // User/Admin join vào room của một cuộc hội thoại cụ thể
     // Client gọi sau khi lấy được chatId từ GET /chats/me
     socket.on("chat:join", (chatId: string) => {
       if (!chatId) return;
       socket.join(`chat:${chatId}`);
-      console.log(`[Socket] ${userId} joined chat room: ${chatId}`);
+      logger.info(`[Socket] ${userId} joined chat room: ${chatId}`);
     });
 
     // Rời room chat (khi đóng cửa sổ chat)
     socket.on("chat:leave", (chatId: string) => {
       if (!chatId) return;
       socket.leave(`chat:${chatId}`);
-      console.log(`[Socket] ${userId} left chat room: ${chatId}`);
+      logger.info(`[Socket] ${userId} left chat room: ${chatId}`);
     });
 
     // Đang nhập — không cần HTTP, socket trực tiếp là đủ
@@ -73,7 +72,7 @@ export const initSocket = (httpServer: HttpServer) => {
     });
 
     socket.on("disconnect", (reason) => {
-      console.log(`[Socket] Disconnected: ${userId} | reason: ${reason}`);
+      logger.info(`[Socket] Disconnected: ${userId} | reason: ${reason}`);
     });
   });
 

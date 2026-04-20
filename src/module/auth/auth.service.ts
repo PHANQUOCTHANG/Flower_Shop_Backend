@@ -11,12 +11,18 @@ import {
   ChangePasswordRequest,
 } from "./auth.request";
 import { AuthResponseDto } from "./auth.response";
-import { getCache, setCache, deleteCache } from "@/utils/cache";
+import {
+  getCache,
+  setCache,
+  deleteCache,
+  deleteCacheByPattern,
+} from "@/utils/cache";
 
-// Định nghĩa kết quả trả về nội bộ cho Service
+// Kết quả nội bộ — thêm refreshTokenExpiresAt để controller set cookie chính xác
 interface AuthResult {
   accessToken: string;
   refreshToken: string;
+  refreshTokenExpiresAt: Date; // <-- thêm mới
   user: any;
 }
 
@@ -40,29 +46,26 @@ export class AuthService implements IAuthService {
     private readonly otpRepo: IOtpRepository,
   ) {}
 
-  // Đăng ký tài khoản và cấp token ngay lập tức
   async register(dto: RegisterRequest): Promise<AuthResponseDto> {
     const existed = await this.userRepo.findByEmail(dto.email);
     if (existed) throw new AppError("Email đã tồn tại trên hệ thống", 409);
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-
     const user = await this.userRepo.create({
       ...dto,
       password: hashedPassword,
       role: dto.role || "CUSTOMER",
     });
 
-    // Đăng ký mới không có remember me, mặc định 24h
     const result = await this.generateAuthResult(user, false);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
       result.refreshToken,
+      result.refreshTokenExpiresAt, // <-- truyền xuống DTO
     );
   }
 
-  // Đăng nhập bằng Email/Password
   async login(dto: LoginRequest): Promise<AuthResponseDto> {
     const user = await this.userRepo.findByEmail(dto.email);
     if (!user || !user.password || user.role !== dto.role) {
@@ -81,30 +84,25 @@ export class AuthService implements IAuthService {
       result.user,
       result.accessToken,
       result.refreshToken,
+      result.refreshTokenExpiresAt,
     );
   }
 
-  // Làm mới Access Token (Token Rotation + Redis Cache)
   async refresh(refreshToken: string): Promise<AuthResponseDto> {
     if (!refreshToken) throw new AppError("Không tìm thấy Refresh Token", 401);
 
-    // 1. Kiểm tra Redis trước - Cache refresh token (7 ngày)
     const cacheKey = `${this.CACHE_KEY_REFRESH}${refreshToken}`;
     let userId = await getCache<string>(cacheKey);
 
-    // 2. Nếu không có cache, kiểm tra database (fallback)
     if (!userId) {
       const stored = await this.refreshRepo.findValid(refreshToken);
-      if (!stored) {
-        throw new AppError("Phiên làm việc hết hạn", 401);
-      }
+      if (!stored) throw new AppError("Phiên làm việc hết hạn", 401);
       userId = stored.userId;
     }
 
     const user = await this.userRepo.findById(userId);
     if (!user) throw new AppError("Người dùng không tồn tại", 404);
 
-    // 3. Thu hồi token cũ (Xóa cả DB và Redis)
     await Promise.all([
       this.refreshRepo.revoke(refreshToken),
       deleteCache(cacheKey),
@@ -115,22 +113,18 @@ export class AuthService implements IAuthService {
       result.user,
       result.accessToken,
       result.refreshToken,
+      result.refreshTokenExpiresAt,
     );
   }
 
-  // Đăng xuất và vô hiệu hóa token
   async logout(refreshToken: string, accessToken?: string): Promise<void> {
     if (!refreshToken) throw new AppError("Không tìm thấy Refresh Token", 401);
 
-    // 1. Thu hồi Refresh Token (xóa DB + Redis cache)
     await Promise.all([
       this.refreshRepo.revoke(refreshToken),
       deleteCache(`${this.CACHE_KEY_REFRESH}${refreshToken}`),
     ]);
 
-    // 2. [Bảo mật] Đưa Access Token vào Blacklist
-    // Ngăn token này sử dụng cho đến khi hết hạn
-    // TTL = thời gian còn lại của token
     if (accessToken) {
       const decoded: any = jwt.decode(accessToken);
       const remainingTime = decoded.exp - Math.floor(Date.now() / 1000);
@@ -144,7 +138,6 @@ export class AuthService implements IAuthService {
     }
   }
 
-  // Đổi mật khẩu sau khi đã verify OTP thành công
   async resetPassword(dto: ResetPasswordRequest): Promise<AuthResponseDto> {
     const record = await this.otpRepo.findValidByEmail(dto.email);
     if (!record || !record.verified) {
@@ -157,23 +150,21 @@ export class AuthService implements IAuthService {
     });
     if (!user) throw new AppError("Người dùng không tồn tại", 404);
 
-    // 3. Bảo mật: Thu hồi tất cả phiên đăng nhập cũ
     await Promise.all([
-      this.refreshRepo.revokeAllByUser(user.id), // Xóa DB
-      this.otpRepo.deleteByEmail(dto.email), // Xóa DB
-      deleteCache(`otp:${dto.email}`), // Xóa OTP cache (5 phút)
+      this.refreshRepo.revokeAllByUser(user.id),
+      this.otpRepo.deleteByEmail(dto.email),
+      deleteCache(`otp:${dto.email}`),
     ]);
 
-    // Reset password sau khi quên, mặc định 24h
     const result = await this.generateAuthResult(user, false);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
       result.refreshToken,
+      result.refreshTokenExpiresAt,
     );
   }
 
-  // Thay đổi mật khẩu khi người dùng đã đăng nhập
   async changePassword(
     userId: string,
     dto: ChangePasswordRequest,
@@ -183,29 +174,20 @@ export class AuthService implements IAuthService {
       throw new AppError("Người dùng không tồn tại", 404);
     }
 
-    // 1. Xác minh mật khẩu hiện tại
     const isValid = await bcrypt.compare(dto.currentPassword, user.password);
     if (!isValid) {
       throw new AppError("Mật khẩu hiện tại không chính xác", 401);
     }
 
-    // 2. Hash mật khẩu mới
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    await this.userRepo.updateById(userId, { password: hashedPassword });
 
-    // 3. Cập nhật mật khẩu
-    await this.userRepo.updateById(userId, {
-      password: hashedPassword,
-    });
-
-    // 4. Bảo mật: Thu hồi tất cả phiên đăng nhập cũ
-    // Người dùng phải đăng nhập lại với mật khẩu mới
     await Promise.all([
-      this.refreshRepo.revokeAllByUser(userId), // Xóa DB
-      deleteCache(`${this.CACHE_KEY_REFRESH}*`), // Xóa Redis (pattern)
+      this.refreshRepo.revokeAllByUser(userId),
+      deleteCacheByPattern(`${this.CACHE_KEY_REFRESH}*`),
     ]);
   }
 
-  // Tạo JWT và lưu vào song song DB & Redis
   private async generateAuthResult(
     user: any,
     rememberMe: boolean = false,
@@ -223,30 +205,30 @@ export class AuthService implements IAuthService {
       { expiresIn: "15m" },
     );
 
-    // Xác định thời hạn refreshToken dựa trên rememberMe
-    const refreshTokenExpiry = rememberMe ? "14d" : "1d";
     const refreshTokenTTL = rememberMe
       ? 14 * 24 * 60 * 60 * 1000 // 14 ngày (ms)
-      : 24 * 60 * 60 * 1000; // 24 giờ (ms)
+      : 24 * 60 * 60 * 1000; //  1 ngày  (ms)
+
+    // Tính chính xác một lần, dùng lại nhất quán ở cả DB, Redis, và cookie
+    const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenTTL);
 
     const refreshToken = jwt.sign({ userId: userIdStr }, refreshSecret, {
-      expiresIn: refreshTokenExpiry,
+      expiresIn: rememberMe ? "14d" : "1d",
     });
 
-    // Lưu refresh token vào cả DB và Redis với TTL tương ứng
     await Promise.all([
       this.refreshRepo.createOrUpdate({
         userId: userIdStr,
         token: refreshToken,
-        expiresAt: new Date(Date.now() + refreshTokenTTL),
+        expiresAt: refreshTokenExpiresAt,
       }),
       setCache(
         `${this.CACHE_KEY_REFRESH}${refreshToken}`,
         userIdStr,
-        Math.floor(refreshTokenTTL / 1000), // Convert ms to seconds for Redis TTL
+        Math.floor(refreshTokenTTL / 1000), // Redis nhận giây
       ),
     ]);
 
-    return { accessToken, refreshToken, user };
+    return { accessToken, refreshToken, refreshTokenExpiresAt, user };
   }
 }

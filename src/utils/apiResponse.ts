@@ -24,6 +24,6 @@ export class ApiResponse<T> {
 
   static paginate<T>(result: any) {
     const { data, ...meta } = result;
-    return new ApiResponse(data, { ...meta, results: data.length });
+    return new ApiResponse(data, { ...meta, results: data.length});
   }
 }

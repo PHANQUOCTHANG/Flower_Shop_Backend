@@ -1,8 +1,9 @@
 import { Worker, Job } from "bullmq";
-import { createRedisConnection } from "@/config/queue"; // đổi import
+import { createRedisConnection } from "@/config/queue";
 import { getIO } from "@/config/socket";
 import { orderService } from "@/config/container";
 import { CheckoutDto } from "@/module/order/order.request";
+import logger from "@/utils/logger";
 
 interface CheckoutJobData {
   userId: string;
@@ -35,7 +36,7 @@ export const startOrderWorker = () => {
 
         return order;
       } catch (error: any) {
-        console.error("[Worker] Job failed:", job.id, error.message);
+        logger.error(`[Worker] Job failed: ${job.id} — ${error.message}`);
 
         io.to(`user:${userId}`).emit("order:status", {
           jobId: job.id,
@@ -57,13 +58,11 @@ export const startOrderWorker = () => {
   );
 
   worker.on("completed", (job) => {
+    logger.info(`[Worker] Job ${job?.id} completed successfully`);
   });
 
   worker.on("failed", (job, err) => {
-    console.error(
-      `[Worker] Job ${job?.id} failed after ${job?.attemptsMade} attempts:`,
-      err.message,
-    );
+    logger.error(`[Worker] Job ${job?.id} failed after ${job?.attemptsMade} attempts: ${err.message}`);
   });
 
   return worker;

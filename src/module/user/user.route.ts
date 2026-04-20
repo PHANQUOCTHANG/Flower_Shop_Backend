@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as userCtrl from "./user.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
+import { requireRole } from "@/middleware/auth.middleware";
 import {
   CreateUserSchema,
   UpdateUserSchema,
@@ -9,21 +10,30 @@ import {
 
 const router = Router();
 
-// GET danh sách & POST tạo user
+// [GET] danh sách & [POST] tạo user (chỉ ADMIN)
 router
   .route("/")
-  .get(userCtrl.getUsers)
-  .post(validationMiddleware(CreateUserSchema), userCtrl.createUser);
+  .get(requireRole("ADMIN"), userCtrl.getUsers)
+  .post(
+    requireRole("ADMIN"),
+    validationMiddleware(CreateUserSchema),
+    userCtrl.createUser,
+  );
 
-// GET chi tiết & PATCH cập nhật & DELETE xóa
+// [GET] chi tiết & [PATCH] cập nhật & [DELETE] xóa (chỉ ADMIN)
 router
   .route("/:id")
-  .get(validationMiddleware(IdParamSchema, "params"), userCtrl.getUser)
+  .get(requireRole("ADMIN"), validationMiddleware(IdParamSchema, "params"), userCtrl.getUser)
   .patch(
+    requireRole("ADMIN"),
     validationMiddleware(IdParamSchema, "params"),
     validationMiddleware(UpdateUserSchema),
     userCtrl.updateUser,
   )
-  .delete(validationMiddleware(IdParamSchema, "params"), userCtrl.deleteUser);
+  .delete(
+    requireRole("ADMIN"),
+    validationMiddleware(IdParamSchema, "params"),
+    userCtrl.deleteUser,
+  );
 
 export default router;

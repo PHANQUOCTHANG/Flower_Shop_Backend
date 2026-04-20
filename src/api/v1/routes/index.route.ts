@@ -6,6 +6,7 @@ import authRoute from "@/module/auth/auth.routes";
 import orderRoute from "@/module/order/order.route";
 import cartRoute from "@/module/cart/cart.route";
 import chatRoute from "@/module/chat/chat.route";
+import addressRouter from "@/module/address/address.route";
 import { requireAuth } from "@/middleware/auth.middleware";
 
 const clientRoute = (app: Application) => {
@@ -16,6 +17,7 @@ const clientRoute = (app: Application) => {
   app.use(path + "/auth", authRoute);
   app.use(path + "/cart", requireAuth, cartRoute);
   app.use(path + "/orders", requireAuth, orderRoute);
+  app.use(path + "/addresses", addressRouter);
   app.use(path + "/chats", requireAuth, chatRoute);
 };
 

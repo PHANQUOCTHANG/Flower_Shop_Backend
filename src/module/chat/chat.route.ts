@@ -34,7 +34,7 @@ router.post(
   chatController.adminSendMessage,
 );
 
-// Xem lịch sử tin nhắn (Dùng chung hoặc phân quyền tùy logic)
+// Xem lịch sử tin nhắn (Admin xem tất cả, User chỉ xem chat của mình — được kiểm soat ở service)
 router.get(
   "/:id/messages",
   validationMiddleware(ChatIdParamSchema, "params"),

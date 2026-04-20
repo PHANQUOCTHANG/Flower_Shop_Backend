@@ -1,13 +1,19 @@
 import { PrismaClient, Order, Prisma } from "@prisma/client";
 import { IPaginatedResult } from "@/utils/query"; // Giả định dùng chung util với Product
+import { OrderQuery } from "./order.type";
 
 export interface IOrderRepository {
   createOrder(data: any): Promise<Order>;
-  findAll(query: any): Promise<IPaginatedResult<Order>>;
+  findAll(query: OrderQuery): Promise<IPaginatedResult<Order>>;
   findById(id: string): Promise<Order | null>;
-  findByUserId(userId: string, query: any): Promise<IPaginatedResult<Order>>;
+  findByUserId(
+    userId: string,
+    query: OrderQuery,
+  ): Promise<IPaginatedResult<Order>>;
   updateStatus(id: string, status: string): Promise<Order | null>;
-  findAllCustomers(query: any): Promise<IPaginatedResult<any>>;
+  findAllCustomers(
+    query: any,
+  ): Promise<IPaginatedResult<any> | { newCustomersThisMonth: number }>;
 }
 
 export class OrderRepository implements IOrderRepository {
@@ -55,7 +61,7 @@ export class OrderRepository implements IOrderRepository {
   }
 
   // Lấy danh sách đơn hàng (admin) với phân trang và lọc
-  async findAll(query: any): Promise<IPaginatedResult<Order>> {
+  async findAll(query: OrderQuery): Promise<IPaginatedResult<Order>> {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
     const skip = (page - 1) * limit;
@@ -159,7 +165,7 @@ export class OrderRepository implements IOrderRepository {
   // Lịch sử đơn hàng của khách hàng
   async findByUserId(
     userId: string,
-    query: any,
+    query: OrderQuery,
   ): Promise<IPaginatedResult<Order>> {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
@@ -242,7 +248,9 @@ export class OrderRepository implements IOrderRepository {
   }
 
   // Danh sách khách hàng
-  async findAllCustomers(query: any): Promise<IPaginatedResult<any>> {
+  async findAllCustomers(
+    query: any,
+  ): Promise<IPaginatedResult<any> | { newCustomersThisMonth: number }> {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
 
@@ -276,85 +284,102 @@ export class OrderRepository implements IOrderRepository {
       },
     });
 
-    // Calculate total spent and last order date
-    const customerStats = await Promise.all(
-      users.map(async (user) => {
-        const [totalSpent, lastOrderDate] = await Promise.all([
-          this.prisma.order.aggregate({
-            where: {
-              userId: user.id,
-              status: "completed",
-            },
-            _sum: {
-              totalPrice: true,
-            },
-          }),
-          this.prisma.order.findFirst({
-            where: {
-              userId: user.id,
-            },
-            orderBy: {
-              createdAt: "desc",
-            },
-            select: {
-              createdAt: true,
-            },
-          }),
-        ]);
+    // Tính ngày đầu và cuối tháng hiện tại
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    // Tối ưu: lấy stats bằng 1 query aggregate thay vì N query song song
+    const orderStats = await this.prisma.order.groupBy({
+      by: ["userId"],
+      where: { status: "completed", userId: { in: users.map((u) => u.id) } },
+      _sum: { totalPrice: true },
+      _max: { createdAt: true },
+      _min: { createdAt: true },
+    });
+
+    const statsMap = new Map(
+      orderStats.map((s) => [
+        s.userId,
+        {
+          totalSpent: Number(s._sum.totalPrice || 0),
+          lastOrderDate: s._max.createdAt,
+          firstOrderDate: s._min.createdAt,
+        },
+      ]),
+    );
+
+    const customerStats = users
+      .map((user) => {
+        const stats = statsMap.get(user.id) ?? {
+          totalSpent: 0,
+          lastOrderDate: null,
+          firstOrderDate: null,
+        };
 
         return {
           ...user,
-          totalSpent: Number(totalSpent._sum.totalPrice || 0),
-          lastOrderDate: lastOrderDate?.createdAt || null,
+          ...stats,
         };
-      }),
-    );
+      })
+      .filter((u) => u.totalSpent > 0);
 
-    // Filter: only customers with at least 1 completed order
-    const filteredStats = customerStats.filter((stat) => stat.totalSpent > 0);
-
-    // Sort by parameter
-    let sorted = filteredStats;
+    // Sắp xếp theo tham số query
+    let sorted = customerStats;
     switch (query.sort) {
       case "oldest":
-        sorted = filteredStats.sort(
+        sorted = customerStats.sort(
           (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
         );
         break;
       case "name-asc":
-        sorted = filteredStats.sort((a, b) =>
+        sorted = customerStats.sort((a, b) =>
           a.fullName.localeCompare(b.fullName),
         );
         break;
       case "name-desc":
-        sorted = filteredStats.sort((a, b) =>
+        sorted = customerStats.sort((a, b) =>
           b.fullName.localeCompare(a.fullName),
         );
         break;
       case "spent-asc":
-        sorted = filteredStats.sort((a, b) => a.totalSpent - b.totalSpent);
+        sorted = customerStats.sort((a, b) => a.totalSpent - b.totalSpent);
         break;
       case "spent-desc":
-        sorted = filteredStats.sort((a, b) => b.totalSpent - a.totalSpent);
+        sorted = customerStats.sort((a, b) => b.totalSpent - a.totalSpent);
         break;
       case "lastorder-asc":
-        sorted = filteredStats.sort((a, b) => {
+        sorted = customerStats.sort((a, b) => {
           if (!a.lastOrderDate && !b.lastOrderDate) return 0;
           if (!a.lastOrderDate) return 1;
           if (!b.lastOrderDate) return -1;
-          return a.lastOrderDate.getTime() - b.lastOrderDate.getTime();
+          return (
+            new Date(a.lastOrderDate).getTime() -
+            new Date(b.lastOrderDate).getTime()
+          );
         });
         break;
       case "lastorder-desc":
-        sorted = filteredStats.sort((a, b) => {
+        sorted = customerStats.sort((a, b) => {
           if (!a.lastOrderDate && !b.lastOrderDate) return 0;
           if (!a.lastOrderDate) return 1;
           if (!b.lastOrderDate) return -1;
-          return b.lastOrderDate.getTime() - a.lastOrderDate.getTime();
+          return (
+            new Date(b.lastOrderDate).getTime() -
+            new Date(a.lastOrderDate).getTime()
+          );
         });
         break;
       default:
-        sorted = filteredStats.sort(
+        sorted = customerStats.sort(
           (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
         );
         break;
@@ -364,12 +389,22 @@ export class OrderRepository implements IOrderRepository {
     const start = (page - 1) * limit;
     const paginatedData = sorted.slice(start, start + limit);
 
+    // Đếm số khách hàng mới trong tháng hiện tại
+    const newCustomersThisMonth = customerStats.filter((c) => {
+      return (
+        c.firstOrderDate &&
+        c.firstOrderDate >= monthStart &&
+        c.firstOrderDate <= monthEnd
+      );
+    }).length;
+
     return {
       data: paginatedData,
-      total: filteredStats.length,
+      total: customerStats.length,
       page,
       limit,
-      totalPages: Math.ceil(filteredStats.length / limit),
+      totalPages: Math.ceil(customerStats.length / limit),
+      newCustomersThisMonth,
     };
   }
 }

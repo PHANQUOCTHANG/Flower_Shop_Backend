@@ -23,7 +23,7 @@ export const createCategory = asyncHandler(
 // [GET] /api/v1/categories - Lấy danh sách danh mục
 export const getCategories = asyncHandler(
   async (req: Request, res: Response): Promise<Response> => {
-    const query = normalizeQuery(req.query);
+    const query = req.query;
     const result = await categoryService.findAll(query);
 
     return res.status(200).json(ApiResponse.paginate(result));

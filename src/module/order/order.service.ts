@@ -10,11 +10,12 @@ import {
   deleteCacheByPattern,
 } from "@/utils/cache";
 import { IUserRepository } from "@/module/user/user.repository";
+import { OrderQuery } from "./order.type";
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
-  findAll(query: any): Promise<any>;
-  findByUserId(userId: string, query: any): Promise<any>;
+  findAll(query: OrderQuery): Promise<any>;
+  findByUserId(userId: string, query: OrderQuery): Promise<any>;
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
   updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
   findAllCustomers(query: any): Promise<any>;
@@ -90,7 +91,7 @@ export class OrderService implements IOrderService {
   }
 
   // Lấy danh sách đơn hàng khách hàng
-  async findByUserId(userId: string, query: any): Promise<any> {
+  async findByUserId(userId: string, query: OrderQuery): Promise<any> {
     // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:list:${userId}:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
@@ -124,7 +125,7 @@ export class OrderService implements IOrderService {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
-    const response = new OrderResponseDto(order);
+    const response = new OrderResponseDto(order)
 
     // Cache 15 phút (chi tiết đơn - read nhiều lần, ít thay đổi)
     await setCache(cacheKey, response, this.CACHE_TTL_DETAIL);
@@ -133,7 +134,7 @@ export class OrderService implements IOrderService {
   }
 
   // Danh sách đơn hàng (admin)
-  async findAll(query: any): Promise<any> {
+  async findAll(query: OrderQuery): Promise<any> {
     // Cache 2 phút (admin list - cần dữ liệu tương đối mới)
     const cacheKey = `${this.CACHE_KEY}:admin:all:${JSON.stringify(query)}`;
     const cached = await getCache<any>(cacheKey);
