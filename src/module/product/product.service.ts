@@ -46,8 +46,11 @@ export class ProductService implements IProductService {
       slug,
     });
 
-    // Xóa cache danh sách (sản phẩm mới được thêm)
-    await deleteCacheByPattern(`${this.CACHE_KEY}:list:*`);
+    // Xóa cache danh sách và hiển thị trang chủ (sản phẩm mới được thêm)
+    await Promise.all([
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`),
+    ]);
 
     return ProductResponseDto.from(product);
   }
@@ -148,6 +151,7 @@ export class ProductService implements IProductService {
       deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Cache chi tiết slug cũ
       deleteCacheByPattern(`${this.CACHE_KEY}:list:*`), // Cache danh sách (giá/thông tin thay đổi)
+      deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`), // Cache hiển thị nhóm danh mục trang chủ
     ];
 
     // Nếu slug thay đổi, xóa cache slug mới

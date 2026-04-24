@@ -182,9 +182,15 @@ export class AuthService implements IAuthService {
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
     await this.userRepo.updateById(userId, { password: hashedPassword });
 
+    // Xóa cache refresh token cụ thể của user thay vì xóa của toàn hệ thống
+    const userTokens = await this.refreshRepo.findByUserId(userId);
+    const deleteCachePromises = userTokens.map((t) =>
+      deleteCache(`${this.CACHE_KEY_REFRESH}${t.token}`),
+    );
+
     await Promise.all([
       this.refreshRepo.revokeAllByUser(userId),
-      deleteCacheByPattern(`${this.CACHE_KEY_REFRESH}*`),
+      ...deleteCachePromises,
     ]);
   }
 

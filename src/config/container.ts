@@ -40,6 +40,12 @@ import {
 import { ProductService } from "@/module/product/product.service";
 import { IUserRepository, UserRepository } from "@/module/user/user.repository";
 import { UserService } from "@/module/user/user.service";
+import { IReviewService, ReviewService } from "@/module/review/review.service";
+import {
+  IReviewRepository,
+  ReviewRepository,
+} from "@/module/review/review.repository";
+import { ReviewImageService } from "@/module/review/review.image.service";
 
 // User
 const userRepository: IUserRepository = new UserRepository(prisma);
@@ -99,3 +105,11 @@ const addressRepository: IAddressRepository = new AddressRepository(prisma);
 export const addressService: IAddressService = new AddressService(
   addressRepository,
 );
+
+// Review
+const reviewRepository: IReviewRepository = new ReviewRepository(prisma);
+export const reviewService: IReviewService = new ReviewService(
+  reviewRepository,
+  orderService,
+);
+export const reviewImageService = new ReviewImageService();

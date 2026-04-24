@@ -8,6 +8,8 @@ import cartRoute from "@/module/cart/cart.route";
 import chatRoute from "@/module/chat/chat.route";
 import addressRouter from "@/module/address/address.route";
 import { requireAuth } from "@/middleware/auth.middleware";
+import reviewRoute from "@/module/review/review.route";
+
 
 const clientRoute = (app: Application) => {
   const path = "/api";
@@ -19,6 +21,7 @@ const clientRoute = (app: Application) => {
   app.use(path + "/orders", requireAuth, orderRoute);
   app.use(path + "/addresses", addressRouter);
   app.use(path + "/chats", requireAuth, chatRoute);
+  app.use(path + "/reviews", reviewRoute);
 };
 
 export default clientRoute;

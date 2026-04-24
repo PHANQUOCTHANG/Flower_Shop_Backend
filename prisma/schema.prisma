@@ -23,40 +23,6 @@ enum AuthProvider {
 
 // --- MODELS ---
 
-// model Product {
-//   id                String    @id @default(uuid())
-//   name              String    @db.VarChar(255)
-//   slug              String    @unique @db.VarChar(255)
-//   shortDescription  String?   @map("short_description") @db.Text
-//   description       String?   @db.Text
-//   price             Decimal   @db.Decimal(12, 2)
-//   comparePrice      Decimal?  @map("compare_price") @db.Decimal(12, 2)
-//   costPrice         Decimal?  @map("cost_price") @db.Decimal(12, 2)
-//   sku               String?   @unique @db.VarChar(100)
-//   stockQuantity     Int       @default(0) @map("stock_quantity")
-//   lowStockThreshold Int?      @default(5) @map("low_stock_threshold")
-//   thumbnailUrl      String?   @map("thumbnail_url") @db.Text
-//   metaTitle         String?   @map("meta_title") @db.VarChar(255)
-//   metaDescription   String?   @map("meta_description") @db.Text
-//   metaKeywords      String? @map("meta_keywords") @db.Text
-//   status            String    @default("active") @db.VarChar(20)
-  
-//   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
-//   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
-//   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz
-
-//   // Quan hệ
-//   categories ProductCategory[]
-//   images     ProductImage[]
-//   cartItems  CartItem[]
-//   orderItems OrderItem[]
-
-//   @@map("products")
-//   @@index([slug])
-//   @@index([status])
-//   @@index([price])
-// }
-
 model User {
   id            String       @id @default(uuid())
   fullName      String       @map("full_name") @db.VarChar(150)
@@ -70,7 +36,6 @@ model User {
   isActive      Boolean      @default(true) @map("is_active")
   emailVerified Boolean      @default(false) @map("email_verified")
   
-  // Timestamps đồng bộ múi giờ
   lastLogin     DateTime?    @map("last_login") @db.Timestamptz
   createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz
@@ -81,11 +46,10 @@ model User {
   cart          Cart?
   orders        Order[]
   addresses     Address[]
-
-  // Thêm quan hệ cho Chat
-  chats      Chat[]    @relation("UserChats")
-  adminChats Chat[]    @relation("AdminChats")
-  messages   Message[]
+  reviews       Review[]
+  chats         Chat[]       @relation("UserChats")
+  adminChats    Chat[]       @relation("AdminChats")
+  messages      Message[]
 
   @@map("users")
   @@index([deletedAt])
@@ -136,7 +100,6 @@ model Category {
   updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt       DateTime?         @map("deleted_at") @db.Timestamptz
 
-  // Quan hệ cha-con (Đệ quy)
   parent   Category?         @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[]        @relation("CategoryToCategory")
   products ProductCategory[]
@@ -145,8 +108,6 @@ model Category {
   @@index([slug])
   @@index([parentId])
 }
-
-
 
 model Product {
   id                String    @id @default(uuid())
@@ -170,9 +131,10 @@ model Product {
   images     ProductImage[]
   cartItems  CartItem[]
   orderItems OrderItem[]
+  reviews    Review[]
 
   @@map("products")
-  @@index([sku]) // Thêm index để tìm kiếm theo mã cực nhanh
+  @@index([sku])
   @@index([slug])
   @@index([status])
   @@index([price])
@@ -204,10 +166,10 @@ model ProductImage {
 }
 
 model Cart {
-  id        String     @id @default(uuid())
-  userId    String     @unique @map("user_id")
-  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items CartItem[]
@@ -231,21 +193,20 @@ model CartItem {
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  userId          String      @map("user_id")
-  totalPrice      Decimal     @map("total_price") @db.Decimal(12, 2)
-  status          String      @default("pending") @db.VarChar(20)
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  totalPrice      Decimal  @map("total_price") @db.Decimal(12, 2)
+  status          String   @default("pending") @db.VarChar(20)
   
-  // Thông tin Snapshot (Địa chỉ/SĐT tại thời điểm mua)
-  name String?                @map("name") @db.Text
-  shippingAddress String?     @map("shipping_address") @db.Text
-  shippingPhone   String?     @map("shipping_phone") @db.VarChar(20)
-  paymentMethod   String?     @map("payment_method") @db.VarChar(50)
-  paymentStatus   String      @default("unpaid") @map("payment_status") @db.VarChar(20)
-  note String?                @map("note") @db.Text
+  name            String?  @map("name") @db.Text
+  shippingAddress String?  @map("shipping_address") @db.Text
+  shippingPhone   String?  @map("shipping_phone") @db.VarChar(20)
+  paymentMethod   String?  @map("payment_method") @db.VarChar(50)
+  paymentStatus   String   @default("unpaid") @map("payment_status") @db.VarChar(20)
+  note            String?  @map("note") @db.Text
 
-  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user  User        @relation(fields: [userId], references: [id])
   items OrderItem[]
@@ -255,40 +216,72 @@ model Order {
 }
 
 model OrderItem {
-  id        String   @id @default(uuid())
-  orderId   String   @map("order_id")
-  productId String   @map("product_id")
+  id        String  @id @default(uuid())
+  orderId   String  @map("order_id")
+  productId String  @map("product_id")
   quantity  Int
-  price     Decimal  @db.Decimal(12, 2) // Giá chốt lúc mua
-  subtotal  Decimal  @db.Decimal(12, 2)
+  price     Decimal @db.Decimal(12, 2)
+  subtotal  Decimal @db.Decimal(12, 2)
+  isReview  Boolean @default(false) @map("is_review")
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@unique([orderId, productId]) 
   @@map("order_items")
   @@index([orderId])
 }
 
-// Chat
-model Chat {
-  id            String    @id @default(uuid()) @db.Uuid
-  userId        String    @map("user_id")
-  adminId       String?   @map("admin_id")
-  status        String    @default("open") @db.VarChar(20)
-  lastMessageAt DateTime? @map("last_message_at") @db.Timestamptz
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
-
-  // Quan hệ với bảng User (Giả định bảng User dùng id kiểu String)
-  user          User      @relation("UserChats", fields: [userId], references: [id])
-  admin         User?     @relation("AdminChats", fields: [adminId], references: [id])
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int      @default(5)
+  content   String?  @db.Text
+  isVisible Boolean  @default(true) @map("is_visible")
   
-  // Quan hệ với bảng Messages
-  messages      Message[]
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  orderId   String?  @map("order_id")
+
+  user    User    @relation(fields: [userId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  media   ReviewMedia[]
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  @@map("reviews")
+  @@index([productId])
+  @@index([userId])
+}
+
+model ReviewMedia {
+  id       String @id @default(uuid())
+  reviewId String @map("review_id")
+  url      String @db.Text
+  publicId String @map("public_id") @db.VarChar(255)
+  type     String @default("image") @db.VarChar(20) // "image" hoặc "video"
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@map("review_media")
+}
+
+model Chat {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id")
+  adminId        String?   @map("admin_id")
+  status         String    @default("open") @db.VarChar(20)
+  lastMessageAt  DateTime? @map("last_message_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  user     User      @relation("UserChats", fields: [userId], references: [id])
+  admin    User?     @relation("AdminChats", fields: [adminId], references: [id])
+  messages Message[]
 
   @@map("chats")
   @@index([userId])
-  @@index([adminId])
   @@index([status])
 }
 
@@ -300,38 +293,35 @@ model Message {
   content    String   @db.Text
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  // Quan hệ
-  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender     User     @relation(fields: [senderId], references: [id])
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id])
 
   @@map("messages")
   @@index([chatId])
 }
 
 model Address {
-  id                String   @id @default(uuid())
-  userId            String   @map("user_id")
-  name              String   @db.Text // Tên người nhận
-  phone             String   @db.VarChar(20) // Số điện thoại nhận hàng
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  name            String   @db.Text
+  phone           String   @db.VarChar(20)
   
-  // Chi tiết địa chỉ (Lưu cả code và name)
-  provinceCode      String   @map("province_code") @db.VarChar(10)
-  provinceName      String   @map("province_name") @db.VarChar(100)
-  districtCode      String   @map("district_code") @db.VarChar(10)
-  districtName      String   @map("district_name") @db.VarChar(100)
-  wardCode          String   @map("ward_code") @db.VarChar(10)
-  wardName          String   @map("ward_name") @db.VarChar(100)
-  streetDetail      String   @map("street_detail") @db.Text
+  provinceCode    String   @map("province_code") @db.VarChar(10)
+  provinceName    String   @map("province_name") @db.VarChar(100)
+  districtCode    String   @map("district_code") @db.VarChar(10)
+  districtName    String   @map("district_name") @db.VarChar(100)
+  wardCode        String   @map("ward_code") @db.VarChar(10)
+  wardName        String   @map("ward_name") @db.VarChar(100)
+  streetDetail    String   @map("street_detail") @db.Text
   
-  // Logic quản lý địa chỉ
-  isDefault         Boolean  @default(false) @map("is_default")
+  isDefault       Boolean  @default(false) @map("is_default")
   
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
-  
-  // Quan hệ
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("addresses")
   @@index([userId])
 }

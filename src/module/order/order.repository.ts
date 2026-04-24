@@ -11,6 +11,15 @@ export interface IOrderRepository {
     query: OrderQuery,
   ): Promise<IPaginatedResult<Order>>;
   updateStatus(id: string, status: string): Promise<Order | null>;
+  updateOrderItemReviewStatus(
+    orderId: string,
+    productId: string,
+    isReview: boolean,
+  ): Promise<any | null>;
+  findOrderItemByOrderAndProduct(
+    orderId: string,
+    productId: string,
+  ): Promise<any | null>;
   findAllCustomers(
     query: any,
   ): Promise<IPaginatedResult<any> | { newCustomersThisMonth: number }>;
@@ -229,6 +238,47 @@ export class OrderRepository implements IOrderRepository {
     } catch (error: any) {
       if (error.code === "P2025") return null;
       throw error;
+    }
+  }
+
+  // Cập nhật trạng thái đã đánh giá của OrderItem
+  async updateOrderItemReviewStatus(
+    orderId: string,
+    productId: string,
+    isReview: boolean,
+  ): Promise<any | null> {
+    try {
+      return await this.prisma.orderItem.update({
+        where: {
+          orderId_productId: {
+            orderId,
+            productId,
+          },
+        },
+        data: { isReview },
+      });
+    } catch (error: any) {
+      if (error.code === "P2025") return null;
+      throw error;
+    }
+  }
+
+  // Tìm OrderItem bằng orderId + productId
+  async findOrderItemByOrderAndProduct(
+    orderId: string,
+    productId: string,
+  ): Promise<any | null> {
+    try {
+      return await this.prisma.orderItem.findUnique({
+        where: {
+          orderId_productId: {
+            orderId,
+            productId,
+          },
+        },
+      });
+    } catch (error: any) {
+      return null;
     }
   }
 

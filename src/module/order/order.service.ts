@@ -18,6 +18,11 @@ export interface IOrderService {
   findByUserId(userId: string, query: OrderQuery): Promise<any>;
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
   updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
+  updateOrderItemReviewStatus(
+    orderId: string,
+    productId: string,
+    isReview: boolean,
+  ): Promise<any>;
   findAllCustomers(query: any): Promise<any>;
 }
 
@@ -125,7 +130,7 @@ export class OrderService implements IOrderService {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
-    const response = new OrderResponseDto(order)
+    const response = new OrderResponseDto(order);
 
     // Cache 15 phút (chi tiết đơn - read nhiều lần, ít thay đổi)
     await setCache(cacheKey, response, this.CACHE_TTL_DETAIL);
@@ -188,5 +193,29 @@ export class OrderService implements IOrderService {
     await setCache(cacheKey, result, this.CACHE_TTL_CUSTOMER_LIST);
 
     return result;
+  }
+
+  // Cập nhật trạng thái đã đánh giá của OrderItem
+  async updateOrderItemReviewStatus(
+    orderId: string,
+    productId: string,
+    isReview: boolean,
+  ): Promise<any> {
+    const updated = await this.orderRepo.updateOrderItemReviewStatus(
+      orderId,
+      productId,
+      isReview,
+    );
+    if (!updated) {
+      throw new AppError("OrderItem không tồn tại", 404);
+    }
+
+    // Invalidate cache
+    await Promise.all([
+      deleteCache(`${this.CACHE_KEY}:id:${orderId}`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:*`),
+    ]);
+
+    return updated;
   }
 }

@@ -5,6 +5,7 @@ export interface IRefreshTokenRepository {
   findValid(token: string): Promise<RefreshToken | null>;
   revoke(token: string): Promise<void>;
   revokeAllByUser(userId: string): Promise<void>;
+  findByUserId(userId: string): Promise<RefreshToken[]>;
 }
 
 export class RefreshTokenRepository implements IRefreshTokenRepository {
@@ -54,6 +55,13 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
     await this.prisma.refreshToken.updateMany({
       where: { userId },
       data: { revoked: true },
+    });
+  }
+
+  // Tìm tất cả token của user (để xóa cache chính xác)
+  async findByUserId(userId: string): Promise<RefreshToken[]> {
+    return this.prisma.refreshToken.findMany({
+      where: { userId },
     });
   }
 }

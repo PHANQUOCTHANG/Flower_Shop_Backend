@@ -26,4 +26,11 @@ export class ApiResponse<T> {
     const { data, ...meta } = result;
     return new ApiResponse(data, { ...meta, results: data.length});
   }
+
+  static error(message: string, statusCode: number = 500) {
+    const response = new ApiResponse();
+    response.status = "error";
+    response.message = message;
+    return response;
+  }
 }

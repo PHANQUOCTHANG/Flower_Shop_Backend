@@ -65,6 +65,7 @@ class OrderItemDetailDto {
   quantity: number;
   price: number;
   subtotal: number;
+  isReview: boolean;
 
   constructor(item: any) {
     this.id = item.id;
@@ -75,6 +76,7 @@ class OrderItemDetailDto {
     this.quantity = item.quantity;
     this.price = Number(item.price);
     this.subtotal = Number(item.subtotal);
+    this.isReview = item.isReview;
   }
 }
 
