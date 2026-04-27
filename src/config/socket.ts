@@ -6,12 +6,15 @@ import logger from "@/utils/logger";
 let io: Server;
 
 export const initSocket = (httpServer: HttpServer) => {
-  const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
-  logger.info(`[Socket] Initializing with CORS origin: ${clientUrl}`);
+  const allowedOrigins = process.env.CLIENT_URL
+    ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
+    : ["http://localhost:3000", "http://localhost:5173", "https://flower-jade-delta.vercel.app"];
+
+  logger.info(`[Socket] Initializing with CORS origins: ${allowedOrigins.join(", ")}`);
 
   io = new Server(httpServer, {
     cors: {
-      origin: clientUrl,
+      origin: allowedOrigins,
       credentials: true,
       methods: ["GET", "POST"],
       allowedHeaders: ["Authorization", "Content-Type"],
@@ -40,8 +43,9 @@ export const initSocket = (httpServer: HttpServer) => {
     socket.join(`user:${userId}`);
 
     // Admin join inbox room để nhận thông báo tin mới từ mọi user
-    if (role === "ADMIN") {
+    if (role === "ADMIN" || role === "admin" || role === "STAFF") {
       socket.join("chat:admin");
+      logger.info(`[Socket] ${userId} (${role}) joined chat:admin room`);
     }
 
     logger.info(`[Socket] Connected: ${userId} | role: ${role} | id: ${socket.id}`);

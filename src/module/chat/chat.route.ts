@@ -41,4 +41,12 @@ router.get(
   chatController.getChatHistory,
 );
 
+// Đánh dấu đã đọc (Chỉ Admin)
+router.patch(
+  "/:id/read",
+  requireRole("ADMIN"),
+  validationMiddleware(ChatIdParamSchema, "params"),
+  chatController.markAsRead,
+);
+
 export default router;

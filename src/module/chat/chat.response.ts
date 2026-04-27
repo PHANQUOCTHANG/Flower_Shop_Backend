@@ -5,6 +5,7 @@ export class MessageResponseDto {
   senderRole: string;
   content: string;
   createdAt: string;
+  isRead: boolean;
 
   constructor(data: any) {
     this.id = data.id;
@@ -13,6 +14,7 @@ export class MessageResponseDto {
     this.senderRole = data.senderRole;
     this.content = data.content;
     this.createdAt = data.createdAt.toISOString();
+    this.isRead = data.isRead;
   }
 
   static from(data: any) {
@@ -34,6 +36,7 @@ export class ChatResponseDto {
     content: string;
     createdAt: string;
     senderRole?: string;
+    isRead?: boolean;
   } | null;
 
   constructor(data: any) {
@@ -49,6 +52,7 @@ export class ChatResponseDto {
           content: data.messages[0].content,
           createdAt: data.messages[0].createdAt,
           senderRole: data.messages[0].senderRole,
+          isRead: data.messages[0].isRead,
         }
       : null;
   }

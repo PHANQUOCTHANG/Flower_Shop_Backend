@@ -292,6 +292,7 @@ model Message {
   senderRole String   @map("sender_role") @db.VarChar(10)
   content    String   @db.Text
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  isRead     Boolean  @default(false) @map("is_read")
 
   chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender User @relation(fields: [senderId], references: [id])
@@ -324,4 +325,15 @@ model Address {
 
   @@map("addresses")
   @@index([userId])
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  type      String   @db.VarChar(50) // "ORDER_CREATED"
+  message   String   @db.Text
+  data      Json?    // Optional JSON payload for the activity
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("activity_logs")
 }

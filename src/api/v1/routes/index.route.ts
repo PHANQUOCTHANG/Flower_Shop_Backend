@@ -9,6 +9,7 @@ import chatRoute from "@/module/chat/chat.route";
 import addressRouter from "@/module/address/address.route";
 import { requireAuth } from "@/middleware/auth.middleware";
 import reviewRoute from "@/module/review/review.route";
+import activityLogRoute from "@/module/activity-log/activity-log.route";
 
 
 const clientRoute = (app: Application) => {
@@ -22,6 +23,7 @@ const clientRoute = (app: Application) => {
   app.use(path + "/addresses", addressRouter);
   app.use(path + "/chats", requireAuth, chatRoute);
   app.use(path + "/reviews", reviewRoute);
+  app.use(path + "/activity-logs", requireAuth, activityLogRoute);
 };
 
 export default clientRoute;

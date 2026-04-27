@@ -13,6 +13,7 @@ export interface IChatRepository {
   getMessages(chatId: string, query: any): Promise<any>;
   findAll(query: BaseQuery): Promise<any>;
   findById(chatId: string): Promise<Chat | null>;
+  markMessagesAsRead(chatId: string): Promise<void>;
 }
 
 export class ChatRepository implements IChatRepository {
@@ -102,7 +103,11 @@ export class ChatRepository implements IChatRepository {
     const page = Math.max(Number(query.page) || 1, 1);
     const limit = 10;
 
-    const where: any = {};
+    const where: any = {
+      messages: {
+        some: {}, // Chỉ lấy những chat có ít nhất 1 tin nhắn
+      },
+    };
 
     // Filter by user name
     if (query.search) {
@@ -126,5 +131,19 @@ export class ChatRepository implements IChatRepository {
     });
 
     return { data };
+  }
+
+  // Đánh dấu tất cả tin nhắn của user trong chat là đã đọc
+  async markMessagesAsRead(chatId: string): Promise<void> {
+    await this.prisma.message.updateMany({
+      where: {
+        chatId,
+        senderRole: { not: "admin" },
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+      },
+    });
   }
 }

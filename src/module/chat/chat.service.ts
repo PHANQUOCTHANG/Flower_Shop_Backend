@@ -19,6 +19,7 @@ export interface IChatService {
   getAdminChatList(query: BaseQuery): Promise<any>;
   getChatHistory(chatId: string, query: any): Promise<any>;
   getMyChat(userId: string): Promise<ChatResponseDto>;
+  markAsRead(chatId: string): Promise<void>;
 }
 
 export class ChatService implements IChatService {
@@ -115,5 +116,10 @@ export class ChatService implements IChatService {
   async getMyChat(userId: string): Promise<ChatResponseDto> {
     const chat = await this.chatRepo.getOrCreateChat(userId);
     return ChatResponseDto.from(chat);
+  }
+
+  async markAsRead(chatId: string): Promise<void> {
+    await this.chatRepo.markMessagesAsRead(chatId);
+    await deleteCacheByPattern(`${this.CACHE_KEY}:admin:*`);
   }
 }

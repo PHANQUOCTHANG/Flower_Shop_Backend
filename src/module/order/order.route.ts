@@ -35,4 +35,7 @@ router.patch(
   orderCtrl.updateOrderStatus,
 );
 
+// [PATCH] Khách hàng hủy đơn hàng
+router.patch("/:id/cancel", orderCtrl.cancelOrder);
+
 export default router;

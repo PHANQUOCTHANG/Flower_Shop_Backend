@@ -46,6 +46,14 @@ import {
   ReviewRepository,
 } from "@/module/review/review.repository";
 import { ReviewImageService } from "@/module/review/review.image.service";
+import {
+  IActivityLogRepository,
+  ActivityLogRepository,
+} from "@/module/activity-log/activity-log.repository";
+import {
+  IActivityLogService,
+  ActivityLogService,
+} from "@/module/activity-log/activity-log.service";
 
 // User
 const userRepository: IUserRepository = new UserRepository(prisma);
@@ -87,12 +95,17 @@ export const cartService: ICartService = new CartService(
   productRepository,
 );
 
+// ActivityLog (khai báo trước Order vì OrderService phụ thuộc vào nó)
+const activityLogRepository: IActivityLogRepository = new ActivityLogRepository(prisma);
+export const activityLogService: IActivityLogService = new ActivityLogService(activityLogRepository);
+
 // Order
 const orderRepository: IOrderRepository = new OrderRepository(prisma);
 export const orderService: IOrderService = new OrderService(
   orderRepository,
   cartRepository,
   userRepository,
+  activityLogService,
 );
 export const imageService = new ImageService();
 

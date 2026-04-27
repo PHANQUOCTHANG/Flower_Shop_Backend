@@ -61,3 +61,14 @@ export const getMyChat = asyncHandler(async (req: Request, res: Response) => {
     .status(200)
     .json(ApiResponse.success(data));
 });
+
+// [PATCH] /api/v1/chats/:id/read
+// Admin đánh dấu cuộc hội thoại đã đọc
+export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
+  const chatId = req.params.id as string;
+  await chatService.markAsRead(chatId);
+
+  return res
+    .status(200)
+    .json(ApiResponse.success(null, "Đánh dấu đã đọc thành công"));
+});

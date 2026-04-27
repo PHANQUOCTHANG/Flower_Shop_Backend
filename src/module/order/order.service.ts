@@ -11,6 +11,8 @@ import {
 } from "@/utils/cache";
 import { IUserRepository } from "@/module/user/user.repository";
 import { OrderQuery } from "./order.type";
+import { IActivityLogService } from "@/module/activity-log/activity-log.service";
+import { getIO } from "@/config/socket";
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
@@ -18,6 +20,7 @@ export interface IOrderService {
   findByUserId(userId: string, query: OrderQuery): Promise<any>;
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
   updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
+  cancelOrder(orderId: string, userId: string): Promise<OrderResponseDto>;
   updateOrderItemReviewStatus(
     orderId: string,
     productId: string,
@@ -39,6 +42,7 @@ export class OrderService implements IOrderService {
     private readonly orderRepo: IOrderRepository,
     private readonly cartRepo: ICartRepository,
     private readonly userRepo: IUserRepository,
+    private readonly activityLogService: IActivityLogService,
   ) {}
 
   // Quy trình checkout: Kiểm tra giỏ -> Khóa giá -> Tạo đơn -> Làm trống giỏ
@@ -82,11 +86,28 @@ export class OrderService implements IOrderService {
     // Làm trống giỏ hàng
     await this.cartRepo.clearCart(cart.id);
 
+    // Ghi log + thông báo realtime cho Admin
+    const message = `Có đơn hàng mới vừa được đặt với giá trị ${totalPrice.toLocaleString("vi-VN")}đ`;
+
+    await this.activityLogService.create({
+      type: "ORDER_CREATED",
+      message,
+      data: { orderId: order.id, totalPrice },
+    });
+
+    getIO().to("chat:admin").emit("order:new", {
+      orderId: order.id,
+      totalPrice,
+      message,
+      createdAt: order.createdAt,
+    });
+
     // Xóa cache
     await Promise.all([
       deleteCache(`${this.CART_CACHE_KEY}:${userId}`),
       deleteCache(`${this.PRODUCT_CACHE_KEY}:all`),
       deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
       ...orderItems.map((item) =>
         deleteCache(`${this.PRODUCT_CACHE_KEY}:id:${item.productId}`),
       ),
@@ -175,6 +196,63 @@ export class OrderService implements IOrderService {
       deleteCacheByPattern(`${this.CACHE_KEY}:list:${order.userId}:*`), // Cache lịch sử đơn khách
       deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`), // Cache danh sách admin
       deleteCacheByPattern(`${this.CACHE_KEY}:customers:*`), // Cache danh sách khách hàng
+    ]);
+
+    // Bắn socket realtime cho user
+    getIO().to(`user:${order.userId}`).emit("order:status_updated", {
+      orderId: order.id,
+      status: order.status,
+    });
+
+    return response;
+  }
+
+  // Khách hàng tự hủy đơn hàng
+  async cancelOrder(orderId: string, userId: string): Promise<OrderResponseDto> {
+    const order = await this.orderRepo.findById(orderId);
+    if (!order || order.userId !== userId) {
+      throw new AppError("Không tìm thấy đơn hàng", 404);
+    }
+    
+    if (order.status !== "pending") {
+      throw new AppError("Chỉ có thể hủy đơn hàng khi ở trạng thái chờ xử lý", 400);
+    }
+
+    const updatedOrder = await this.orderRepo.updateStatus(orderId, "cancelled");
+    if (!updatedOrder) {
+      throw new AppError("Không thể hủy đơn hàng", 500);
+    }
+
+    const response = OrderResponseDto.from(updatedOrder);
+
+    // Ghi log hoạt động
+    const message = `Khách hàng vừa hủy đơn hàng #${updatedOrder.id.split("-")[0].toUpperCase()}`;
+    await this.activityLogService.create({
+      type: "ORDER_CANCELLED",
+      message,
+      data: { orderId: updatedOrder.id, totalPrice: updatedOrder.totalPrice },
+    });
+
+    // Thông báo cho Admin
+    getIO().to("chat:admin").emit("order:cancelled", {
+      orderId: updatedOrder.id,
+      totalPrice: updatedOrder.totalPrice,
+      message,
+      createdAt: updatedOrder.updatedAt,
+    });
+
+    // Bắn event cập nhật realtime cho chính user đó (để update danh sách ở tab khác nếu có)
+    getIO().to(`user:${userId}`).emit("order:status_updated", {
+      orderId: updatedOrder.id,
+      status: updatedOrder.status,
+    });
+
+    // Xóa cache
+    await Promise.all([
+      deleteCache(`${this.CACHE_KEY}:id:${orderId}`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:customers:*`),
     ]);
 
     return response;

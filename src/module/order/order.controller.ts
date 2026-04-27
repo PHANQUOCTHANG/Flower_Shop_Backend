@@ -97,3 +97,17 @@ export const updateOrderStatus = asyncHandler(
       .json(ApiResponse.success(data, "Cập nhật trạng thái thành công"));
   },
 );
+
+// [PATCH] /api/v1/orders/:id/cancel - Khách hàng hủy đơn hàng
+export const cancelOrder = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    const orderId = req.params.id as string;
+    
+    const data = await orderService.cancelOrder(orderId, userId);
+
+    return res
+      .status(200)
+      .json(ApiResponse.success(data, "Hủy đơn hàng thành công"));
+  },
+);
