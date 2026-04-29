@@ -111,3 +111,11 @@ export const cancelOrder = asyncHandler(
       .json(ApiResponse.success(data, "Hủy đơn hàng thành công"));
   },
 );
+
+// [GET] /api/v1/orders/dashboard - Thống kê dashboard (admin)
+export const getDashboard = asyncHandler(
+  async (_req: Request, res: Response) => {
+    const data = await orderService.getDashboardStats();
+    return res.status(200).json(ApiResponse.success(data));
+  },
+);

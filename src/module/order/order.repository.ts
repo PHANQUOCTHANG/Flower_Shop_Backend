@@ -1,6 +1,37 @@
 import { PrismaClient, Order, Prisma } from "@prisma/client";
-import { IPaginatedResult } from "@/utils/query"; // Giả định dùng chung util với Product
+import { IPaginatedResult } from "@/utils/query";
 import { OrderQuery } from "./order.type";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface DashboardStats {
+  // KPI thẻ tổng quan (tháng hiện tại)
+  currentMonth: {
+    totalRevenue: number;
+    totalOrders: number;
+    newCustomers: number;
+    pendingOrders: number;
+  };
+  // KPI tháng trước (để tính % so sánh)
+  prevMonth: {
+    totalRevenue: number;
+    totalOrders: number;
+    newCustomers: number;
+    pendingOrders: number;
+  };
+  // Doanh thu theo từng ngày trong tháng hiện tại
+  revenueByDay: { date: string; revenue: number; orders: number }[];
+  // Phân bố danh mục sản phẩm (theo số lượng bán)
+  categoryDistribution: { name: string; quantity: number; percentage: number }[];
+  // Top sản phẩm bán chạy nhất tháng hiện tại
+  topProducts: {
+    productId: string;
+    name: string;
+    thumbnailUrl: string | null;
+    totalQuantity: number;
+    totalRevenue: number;
+  }[];
+}
 
 export interface IOrderRepository {
   createOrder(data: any): Promise<Order>;
@@ -23,6 +54,7 @@ export interface IOrderRepository {
   findAllCustomers(
     query: any,
   ): Promise<IPaginatedResult<any> | { newCustomersThisMonth: number }>;
+  getDashboardStats(): Promise<DashboardStats>;
 }
 
 export class OrderRepository implements IOrderRepository {
@@ -456,6 +488,213 @@ export class OrderRepository implements IOrderRepository {
       limit,
       totalPages: Math.ceil(customerStats.length / limit),
       newCustomersThisMonth,
+    };
+  }
+
+  // ─── Dashboard Stats ──────────────────────────────────────────────────────
+
+  async getDashboardStats(): Promise<DashboardStats> {
+    const now = new Date();
+
+    // Khoảng tháng hiện tại
+    const curStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const curEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Khoảng tháng trước
+    const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    // ── Chạy tất cả queries song song để tối ưu latency ──
+    const [
+      curRevenueAgg,
+      prevRevenueAgg,
+      curOrderCount,
+      prevOrderCount,
+      curPendingCount,
+      prevPendingCount,
+      curNewCustomers,
+      prevNewCustomers,
+      dailyOrders,
+      topItems,
+    ] = await Promise.all([
+      // 1. Doanh thu tháng hiện tại (chỉ completed)
+      this.prisma.order.aggregate({
+        where: { status: "completed", createdAt: { gte: curStart, lte: curEnd } },
+        _sum: { totalPrice: true },
+      }),
+
+      // 2. Doanh thu tháng trước (chỉ completed)
+      this.prisma.order.aggregate({
+        where: { status: "completed", createdAt: { gte: prevStart, lte: prevEnd } },
+        _sum: { totalPrice: true },
+      }),
+
+      // 3. Tổng đơn hàng tháng hiện tại (mọi trạng thái)
+      this.prisma.order.count({
+        where: { createdAt: { gte: curStart, lte: curEnd } },
+      }),
+
+      // 4. Tổng đơn hàng tháng trước
+      this.prisma.order.count({
+        where: { createdAt: { gte: prevStart, lte: prevEnd } },
+      }),
+
+      // 5. Đơn chờ xử lý tháng hiện tại
+      this.prisma.order.count({
+        where: { status: "pending", createdAt: { gte: curStart, lte: curEnd } },
+      }),
+
+      // 6. Đơn chờ xử lý tháng trước
+      this.prisma.order.count({
+        where: { status: "pending", createdAt: { gte: prevStart, lte: prevEnd } },
+      }),
+
+      // 7. Khách hàng mới tháng hiện tại (user có order đầu tiên trong tháng)
+      this.prisma.order.groupBy({
+        by: ["userId"],
+        where: { createdAt: { gte: curStart, lte: curEnd } },
+        _min: { createdAt: true },
+      }),
+
+      // 8. Khách hàng mới tháng trước
+      this.prisma.order.groupBy({
+        by: ["userId"],
+        where: { createdAt: { gte: prevStart, lte: prevEnd } },
+        _min: { createdAt: true },
+      }),
+
+      // 9. Doanh thu theo ngày trong tháng hiện tại (raw query hiệu quả hơn)
+      this.prisma.$queryRaw<{ day: string; revenue: number; orders: number }[]>`
+        SELECT
+          TO_CHAR(created_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') AS day,
+          COALESCE(SUM(total_price), 0)::float                               AS revenue,
+          COUNT(*)::int                                                       AS orders
+        FROM orders
+        WHERE
+          created_at >= ${curStart}
+          AND created_at <= ${curEnd}
+          AND status = 'completed'
+        GROUP BY day
+        ORDER BY day ASC
+      `,
+
+      // 10. Top sản phẩm + danh mục — 1 query duy nhất
+      this.prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: {
+          order: {
+            status: "completed",
+            createdAt: { gte: curStart, lte: curEnd },
+          },
+        },
+        _sum: { quantity: true, subtotal: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: 10,
+      }),
+    ]);
+
+    // ── Lấy thông tin product & category cho top items ──
+    const productIds = topItems.map((i) => i.productId);
+
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: {
+        id: true,
+        name: true,
+        thumbnailUrl: true,
+        categories: {
+          select: {
+            category: { select: { name: true } },
+          },
+          take: 1,
+        },
+      },
+    });
+
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    // ── Top products ──
+    const topProducts = topItems.map((item) => {
+      const product = productMap.get(item.productId);
+      return {
+        productId: item.productId,
+        name: product?.name ?? "Sản phẩm đã xóa",
+        thumbnailUrl: product?.thumbnailUrl ?? null,
+        totalQuantity: item._sum.quantity ?? 0,
+        totalRevenue: Number(item._sum.subtotal ?? 0),
+      };
+    });
+
+    // ── Category distribution ──
+    const categoryMap = new Map<string, { name: string; quantity: number }>();
+    let totalQty = 0;
+
+    topItems.forEach((item) => {
+      const product  = productMap.get(item.productId);
+      const catName  = product?.categories?.[0]?.category?.name ?? "Khác";
+      const qty      = item._sum.quantity ?? 0;
+      totalQty      += qty;
+
+      const existing = categoryMap.get(catName);
+      if (existing) {
+        existing.quantity += qty;
+      } else {
+        categoryMap.set(catName, { name: catName, quantity: qty });
+      }
+    });
+
+    const categoryDistribution = Array.from(categoryMap.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .map((cat) => ({
+        ...cat,
+        percentage: totalQty > 0 ? Math.round((cat.quantity / totalQty) * 100) : 0,
+      }));
+
+    // ── Revenue by day — điền đầy đủ các ngày trong tháng ──
+    const daysInMonth = curEnd.getDate();
+    const revenueMap  = new Map(
+      dailyOrders.map((d) => [d.day, { revenue: d.revenue, orders: d.orders }]),
+    );
+
+    const revenueByDay = Array.from({ length: daysInMonth }, (_, i) => {
+      const date = new Date(curStart.getFullYear(), curStart.getMonth(), i + 1);
+      const key  = date.toISOString().slice(0, 10);
+      const data = revenueMap.get(key);
+      return {
+        date: key,
+        revenue: data?.revenue ?? 0,
+        orders:  data?.orders  ?? 0,
+      };
+    });
+
+    // ── Tính khách hàng mới (user đặt hàng lần đầu trong tháng đó) ──
+    const curUserIds  = new Set(curRevenueAgg  ? curNewCustomers.map((u) => u.userId) : []);
+    const prevUserIds = new Set(prevNewCustomers.map((u) => u.userId));
+
+    // Khách hàng mới = user có lần đặt đầu trong tháng hiện tại và chưa từng đặt trước đó
+    const usersInCurMonth  = curNewCustomers.map((u) => u.userId);
+    const newCurCustomers  = usersInCurMonth.length;
+    const newPrevCustomers = prevNewCustomers.length;
+
+    void curUserIds;
+    void prevUserIds;
+
+    return {
+      currentMonth: {
+        totalRevenue:  Number(curRevenueAgg._sum.totalPrice  ?? 0),
+        totalOrders:   curOrderCount,
+        newCustomers:  newCurCustomers,
+        pendingOrders: curPendingCount,
+      },
+      prevMonth: {
+        totalRevenue:  Number(prevRevenueAgg._sum.totalPrice ?? 0),
+        totalOrders:   prevOrderCount,
+        newCustomers:  newPrevCustomers,
+        pendingOrders: prevPendingCount,
+      },
+      revenueByDay,
+      categoryDistribution,
+      topProducts,
     };
   }
 }

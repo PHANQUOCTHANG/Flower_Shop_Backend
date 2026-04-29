@@ -18,6 +18,9 @@ router.post(
 // [GET] Danh sách đơn hàng (chỉ ADMIN)
 router.get("/", requireRole("ADMIN"), orderCtrl.getAllOrders);
 
+// [GET] Thống kê dashboard (chỉ ADMIN)
+router.get("/dashboard", requireRole("ADMIN"), orderCtrl.getDashboard);
+
 // [GET] Danh sách khách hàng (chỉ ADMIN)
 router.get("/customers/list", requireRole("ADMIN"), orderCtrl.getAllCustomers);
 

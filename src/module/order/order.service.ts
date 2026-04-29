@@ -13,6 +13,7 @@ import { IUserRepository } from "@/module/user/user.repository";
 import { OrderQuery } from "./order.type";
 import { IActivityLogService } from "@/module/activity-log/activity-log.service";
 import { getIO } from "@/config/socket";
+import { DashboardStats } from "./order.repository";
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
@@ -27,16 +28,18 @@ export interface IOrderService {
     isReview: boolean,
   ): Promise<any>;
   findAllCustomers(query: any): Promise<any>;
+  getDashboardStats(): Promise<DashboardStats>;
 }
 
 export class OrderService implements IOrderService {
   private readonly CACHE_KEY = "orders";
   private readonly PRODUCT_CACHE_KEY = "products";
   private readonly CART_CACHE_KEY = "cart";
-  private readonly CACHE_TTL_USER_LIST = 600; // 10 phút - lịch sử đơn khách (read thường)
-  private readonly CACHE_TTL_DETAIL = 900; // 15 phút - chi tiết đơn (read nhiều lần)
-  private readonly CACHE_TTL_ADMIN_LIST = 120; // 2 phút - danh sách admin (cần dữ liệu tương đối mới)
-  private readonly CACHE_TTL_CUSTOMER_LIST = 300; // 5 phút - danh sách khách hàng (read thường)
+  private readonly CACHE_TTL_USER_LIST = 600;    // 10 phút
+  private readonly CACHE_TTL_DETAIL = 900;        // 15 phút
+  private readonly CACHE_TTL_ADMIN_LIST = 120;    // 2 phút
+  private readonly CACHE_TTL_CUSTOMER_LIST = 300; // 5 phút
+  private readonly CACHE_TTL_DASHBOARD = 300;     // 5 phút - dashboard (refresh mỗi 5 phút)
 
   constructor(
     private readonly orderRepo: IOrderRepository,
@@ -108,6 +111,7 @@ export class OrderService implements IOrderService {
       deleteCache(`${this.PRODUCT_CACHE_KEY}:all`),
       deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`),
       deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
+      deleteCache(`${this.CACHE_KEY}:dashboard:stats`),
       ...orderItems.map((item) =>
         deleteCache(`${this.PRODUCT_CACHE_KEY}:id:${item.productId}`),
       ),
@@ -192,10 +196,11 @@ export class OrderService implements IOrderService {
 
     // Xóa cache liên quan
     await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${orderId}`), // Cache chi tiết đơn
-      deleteCacheByPattern(`${this.CACHE_KEY}:list:${order.userId}:*`), // Cache lịch sử đơn khách
-      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`), // Cache danh sách admin
-      deleteCacheByPattern(`${this.CACHE_KEY}:customers:*`), // Cache danh sách khách hàng
+      deleteCache(`${this.CACHE_KEY}:id:${orderId}`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${order.userId}:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:customers:*`),
+      deleteCache(`${this.CACHE_KEY}:dashboard:stats`),
     ]);
 
     // Bắn socket realtime cho user
@@ -253,6 +258,7 @@ export class OrderService implements IOrderService {
       deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`),
       deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
       deleteCacheByPattern(`${this.CACHE_KEY}:customers:*`),
+      deleteCache(`${this.CACHE_KEY}:dashboard:stats`),
     ]);
 
     return response;
@@ -295,5 +301,17 @@ export class OrderService implements IOrderService {
     ]);
 
     return updated;
+  }
+
+  // Dashboard stats (admin) — cache 5 phút
+  async getDashboardStats(): Promise<DashboardStats> {
+    const cacheKey = `${this.CACHE_KEY}:dashboard:stats`;
+    const cached   = await getCache<DashboardStats>(cacheKey);
+    if (cached) return cached;
+
+    const stats = await this.orderRepo.getDashboardStats();
+    await setCache(cacheKey, stats, this.CACHE_TTL_DASHBOARD);
+
+    return stats;
   }
 }
