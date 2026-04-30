@@ -43,7 +43,10 @@
     "unicode": "^14.0.0",
     "unidecode": "^1.1.0",
     "winston": "^3.18.3",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "tsc-alias": "^1.8.16",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -61,10 +64,6 @@
     "@types/winston": "^2.4.4",
     "i": "^0.3.7",
     "nodemon": "^3.1.11",
-    "npm": "^11.12.0",
-    "ts-node": "^10.9.2",
-    "tsc-alias": "^1.8.16",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.9.3"
+    "npm": "^11.12.0"
   }
 }
