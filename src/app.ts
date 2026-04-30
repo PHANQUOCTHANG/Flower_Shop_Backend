@@ -1,12 +1,16 @@
 // app.ts (Phiên bản hoàn chỉnh và tối ưu)
 import express, { Application } from "express";
 import cors from "cors";
+import helmet from "helmet";
 
 
 
 const app: Application = express();
 
-// 1. Cấu hình CORS (Middleware)
+// 1. Helmet — bảo vệ HTTP headers (đặt trước CORS)
+app.use(helmet());
+
+// 2. Cấu hình CORS (Middleware)
 // Cấu hình CORS đọc từ biến môi trường — tránh hardcode localhost
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())

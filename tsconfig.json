@@ -1,31 +1,32 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "5.0",
     "target": "ES2020",
     "module": "CommonJS",
     "rootDir": "./src",
     "outDir": "./dist",
 
-    // --- Cấu hình Alias ---
+    // --- Cấu hình Alias bắt đầu từ đây ---
     "baseUrl": "./src",
     "paths": {
+      // Định nghĩa alias @. Nó trỏ đến thư mục gốc của baseUrl, tức là ./src/
       "@/*": ["*"]
-    },
 
-    // --- Cấu hình bổ sung để sửa lỗi Deploy ---
-    "types": ["node", "multer"], // Sửa lỗi Namespace 'global.Express' has no exported member 'Multer'
-    "typeRoots": ["./node_modules/@types", "./src/types"], // Chỉ định nơi chứa các file .d.ts tùy chỉnh của bạn
-    
+      // Ví dụ cụ thể nếu bạn muốn rõ ràng hơn:
+      // "@utils/*": ["utils/*"],
+      // "@services/*": ["services/*"],
+      // "@interface/*": ["interface/*"]
+    },
+    // --- Cấu hình Alias kết thúc ---
+
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true, // Quan trọng: Bỏ qua kiểm tra lỗi trong node_modules để build nhanh và ít lỗi vặt
+    "skipLibCheck": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "moduleResolution": "node" // Giúp TS tìm kiếm module theo kiểu Node.js chuẩn hơn
+    "emitDecoratorMetadata": true
   },
   "include": [
-    "src/**/*",
-    "src/types/**/*.d.ts" // Đảm bảo các file định nghĩa kiểu tự tạo cũng được quét qua
-  ],
-  "exclude": ["node_modules", "dist"]
+    "src/**/*" // Đảm bảo TypeScript biên dịch tất cả file trong src
+  ]
 }
