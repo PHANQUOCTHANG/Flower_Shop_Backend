@@ -52,8 +52,14 @@ model User {
   messages      Message[]
 
   @@map("users")
+  // --- Index hiện tại của bạn ---
   @@index([deletedAt])
   @@index([provider, providerId])
+
+  // --- Index khuyên dùng thêm ---
+  @@index([phone])             // Tìm kiếm khách hàng qua SĐT
+  @@index([fullName])          // Search tên ở trang Admin
+  @@index([role, isActive])    // Lọc danh sách User theo quyền/trạng thái
 }
 
 model RefreshToken {
@@ -107,6 +113,7 @@ model Category {
   @@map("categories")
   @@index([slug])
   @@index([parentId])
+  @@index([status])
 }
 
 model Product {
@@ -138,6 +145,7 @@ model Product {
   @@index([slug])
   @@index([status])
   @@index([price])
+  @@index([createdAt])
 }
 
 model ProductCategory {
@@ -147,6 +155,7 @@ model ProductCategory {
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@id([productId, categoryId])
+  @@index([categoryId])
   @@map("product_categories")
 }
 
@@ -213,6 +222,9 @@ model Order {
 
   @@map("orders")
   @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
 }
 
 model OrderItem {
@@ -230,6 +242,7 @@ model OrderItem {
   @@unique([orderId, productId]) 
   @@map("order_items")
   @@index([orderId])
+  @@index([productId])
 }
 
 model Review {
@@ -253,6 +266,7 @@ model Review {
   @@map("reviews")
   @@index([productId])
   @@index([userId])
+  @@index([rating])
 }
 
 model ReviewMedia {
@@ -265,6 +279,7 @@ model ReviewMedia {
   review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
   @@map("review_media")
+  @@index([reviewId])
 }
 
 model Chat {
@@ -283,6 +298,7 @@ model Chat {
   @@map("chats")
   @@index([userId])
   @@index([status])
+  @@index([updatedAt])
 }
 
 model Message {
@@ -299,6 +315,7 @@ model Message {
 
   @@map("messages")
   @@index([chatId])
+  @@index([createdAt])
 }
 
 model Address {
@@ -336,6 +353,9 @@ model ActivityLog {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("activity_logs")
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
 }
 
 model SystemSetting {
