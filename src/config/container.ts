@@ -111,7 +111,7 @@ export const imageService = new ImageService();
 
 // Chat
 const chatRepository: IChatRepository = new ChatRepository(prisma);
-export const chatService: IChatService = new ChatService(chatRepository);
+export const chatService: IChatService = new ChatService(chatRepository , prisma);
 
 // Address
 const addressRepository: IAddressRepository = new AddressRepository(prisma);

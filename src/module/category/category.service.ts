@@ -9,6 +9,7 @@ import {
   deleteCache,
   deleteCacheByPattern,
 } from "@/utils/cache";
+import { AIService } from "@/module/chat/ai.service";
 
 export interface ICategoryService {
   create(dto: CreateCategoryDto): Promise<CategoryResponseDto>;
@@ -46,8 +47,11 @@ export class CategoryService implements ICategoryService {
 
     const category = await this.categoryRepo.create(createData);
 
-    // Xóa cache danh sách
-    await deleteCacheByPattern(`${this.CACHE_KEY}:all:*`);
+    // Xóa cache danh sách và cache AI
+    await Promise.all([
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),
+      AIService.invalidateKnowledgeCache(),
+    ]);
 
     return CategoryResponseDto.from(category);
   }
@@ -123,10 +127,11 @@ export class CategoryService implements ICategoryService {
 
     const updated = await this.categoryRepo.updateById(id, updateData);
 
-    // Xóa cache liên quan
+    // Xóa cache liên quan và AI cache
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
       deleteCacheByPattern(`${this.CACHE_KEY}:all:*`), // Cache danh sách (thông tin thay đổi)
+      AIService.invalidateKnowledgeCache(),
     ]);
 
     return CategoryResponseDto.from(updated!);
@@ -141,10 +146,11 @@ export class CategoryService implements ICategoryService {
 
     await this.categoryRepo.softDelete(id);
 
-    // Xóa cache liên quan
+    // Xóa cache liên quan và AI cache
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
       deleteCacheByPattern(`${this.CACHE_KEY}:all:*`), // Cache danh sách (bị ảnh hưởng bởi xóa)
+      AIService.invalidateKnowledgeCache(),
     ]);
   }
 }

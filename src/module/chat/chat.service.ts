@@ -5,6 +5,8 @@ import { SendMessageDto } from "./chat.request";
 import { getIO } from "@/config/socket";
 import { getCache, setCache, deleteCacheByPattern } from "@/utils/cache";
 import { BaseQuery } from "@/utils/query";
+import { AIService } from "@/module/chat/ai.service";
+import { PrismaClient } from "@prisma/client";
 
 export interface IChatService {
   userSendMessage(
@@ -20,12 +22,21 @@ export interface IChatService {
   getChatHistory(chatId: string, query: any): Promise<any>;
   getMyChat(userId: string): Promise<ChatResponseDto>;
   markAsRead(chatId: string): Promise<void>;
+  userSendMessageToAI(
+    userId: string,
+    dto: SendMessageDto,
+  ): Promise<MessageResponseDto>;
+  getMyAIChat(userId: string): Promise<ChatResponseDto>;
 }
 
 export class ChatService implements IChatService {
   private readonly CACHE_KEY = "chats";
 
-  constructor(private readonly chatRepo: IChatRepository) {}
+  // FIX #4: Nhận prisma qua constructor để dùng cùng instance với repository
+  constructor(
+    private readonly chatRepo: IChatRepository,
+    private readonly prisma: PrismaClient,
+  ) {}
 
   async userSendMessage(
     userId: string,
@@ -42,10 +53,7 @@ export class ChatService implements IChatService {
 
     const response = MessageResponseDto.from(message);
 
-    // Emit vào room chat cụ thể (user + admin đã join room này)
     getIO().to(`chat:${chat.id}`).emit("chat:new_message", response);
-
-    // Notify riêng cho admin inbox biết có tin mới (để highlight conversation)
     getIO()
       .to("chat:admin")
       .emit("chat:inbox_update", {
@@ -55,7 +63,6 @@ export class ChatService implements IChatService {
       });
 
     await deleteCacheByPattern(`${this.CACHE_KEY}:admin:*`);
-
     return response;
   }
 
@@ -76,17 +83,13 @@ export class ChatService implements IChatService {
 
     const response = MessageResponseDto.from(message);
 
-    // Emit vào room chat — user đang mở chat sẽ nhận được ngay
     getIO().to(`chat:${chatId}`).emit("chat:new_message", response);
-
-    // Notify thẳng vào room của user (trường hợp user chưa join room chat)
     getIO().to(`user:${chat.userId}`).emit("chat:notification", {
       chatId,
       message: dto.content,
     });
 
     await deleteCacheByPattern(`${this.CACHE_KEY}:admin:*`);
-
     return response;
   }
 
@@ -121,5 +124,79 @@ export class ChatService implements IChatService {
   async markAsRead(chatId: string): Promise<void> {
     await this.chatRepo.markMessagesAsRead(chatId);
     await deleteCacheByPattern(`${this.CACHE_KEY}:admin:*`);
+  }
+
+  async userSendMessageToAI(
+    userId: string,
+    dto: SendMessageDto,
+  ): Promise<MessageResponseDto> {
+    const chat = await this.chatRepo.getOrCreateChat(userId, AIService.AI_ID);
+
+    // 1. Kiểm tra rate limit trước khi gọi AI
+    const limited = await AIService.isRateLimited(userId);
+    if (limited) {
+      // Lưu tin user nhưng trả về thông báo rate limit ngay, không gọi Gemini
+      const userMsg = await this.chatRepo.createMessage({
+        chatId: chat.id,
+        senderId: userId,
+        senderRole: "user",
+        content: dto.content,
+      });
+      const userResponse = MessageResponseDto.from(userMsg);
+      getIO().to(`chat:${chat.id}`).emit("chat:new_message", userResponse);
+
+      // Gửi thông báo rate limit như tin nhắn AI
+      const rateLimitMsg = await this.chatRepo.createMessage({
+        chatId: chat.id,
+        senderId: AIService.AI_ID,
+        senderRole: "ai",
+        content: "Bạn đang nhắn quá nhanh! Vui lòng chờ một chút rồi thử lại nhé 🌸",
+      });
+      getIO()
+        .to(`chat:${chat.id}`)
+        .emit("chat:new_message", MessageResponseDto.from(rateLimitMsg));
+
+      return userResponse;
+    }
+
+    // 2. Lưu tin nhắn user
+    const userMsg = await this.chatRepo.createMessage({
+      chatId: chat.id,
+      senderId: userId,
+      senderRole: "user",
+      content: dto.content,
+    });
+
+    const userResponse = MessageResponseDto.from(userMsg);
+    getIO().to(`chat:${chat.id}`).emit("chat:new_message", userResponse);
+
+    // 3. Gọi AI bất đồng bộ (non-blocking) — trả response về client ngay
+    AIService.getAIResponse(this.prisma, chat.id, dto.content)
+      .then(async (aiContent) => {
+        const aiMsg = await this.chatRepo.createMessage({
+          chatId: chat.id,
+          senderId: AIService.AI_ID,
+          senderRole: "ai", // Dùng "ai" thay vì "admin" để tránh nhầm lẫn
+          content: aiContent,
+        });
+        getIO()
+          .to(`chat:${chat.id}`)
+          .emit("chat:new_message", MessageResponseDto.from(aiMsg));
+      })
+      .catch((error) => {
+        console.error("[ChatService] AI pipeline failed for chatId:", chat.id, error);
+        // Emit lỗi về client để UI không bị treo loading state
+        getIO().to(`chat:${chat.id}`).emit("chat:ai_error", {
+          chatId: chat.id,
+          message: "Rosie gặp sự cố, vui lòng thử lại!",
+        });
+      });
+
+    return userResponse;
+  }
+
+  async getMyAIChat(userId: string): Promise<ChatResponseDto> {
+    const chat = await this.chatRepo.getOrCreateChat(userId, AIService.AI_ID);
+    return ChatResponseDto.from(chat);
   }
 }
