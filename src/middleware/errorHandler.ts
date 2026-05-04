@@ -49,7 +49,7 @@ export function globalErrorHandler(
   res.status(statusCode).json({
     success: false,
     statusCode,
-    message: error.isOperational ? error.message : "Internal Server Error",
+    message: error.isOperational ? error.message : "Lỗi hệ thống, vui lòng thử lại sau!",
     ...(error.details && { details: error.details }),
   });
 }

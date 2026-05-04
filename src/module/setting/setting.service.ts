@@ -1,4 +1,5 @@
 import settingRepository from "./setting.repository";
+import { AIService } from "@/module/chat/ai.service";
 
 class SettingService {
   async getAllSettings() {
@@ -7,7 +8,10 @@ class SettingService {
 
   async updateSetting(key: string, value: any) {
     if (!key) throw new Error("Key is required");
-    return await settingRepository.updateSetting(key, value);
+    const updated = await settingRepository.updateSetting(key, value);
+    // Xoá cache AI để AI cập nhật cấu hình shop mới
+    await AIService.invalidateKnowledgeCache();
+    return updated;
   }
 }
 
