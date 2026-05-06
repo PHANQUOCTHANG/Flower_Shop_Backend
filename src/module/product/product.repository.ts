@@ -1,6 +1,7 @@
 import { PrismaClient, Product, Prisma } from "@prisma/client";
 import { IPaginatedResult } from "@/utils/query";
 import { ProductQuery } from "@/module/product/product.type";
+import { getSearchPattern } from "@/utils/searchUtils";
 
 export interface IProductRepository {
   create(data: any): Promise<Product>;
@@ -9,7 +10,9 @@ export interface IProductRepository {
   findBySlug(slug: string): Promise<Product | null>;
   updateById(id: string, data: any): Promise<Product | null>;
   softDelete(id: string): Promise<void>;
-  findGroupedByCategory(limit: number): Promise<{category: any, products: Product[]}[]>;
+  findGroupedByCategory(
+    limit: number,
+  ): Promise<{ category: any; products: Product[] }[]>;
 }
 
 export class ProductRepository implements IProductRepository {
@@ -99,10 +102,11 @@ export class ProductRepository implements IProductRepository {
       where.status = "active";
     }
 
-    // Tìm kiếm theo tên và SKU
+    // Tìm kiếm theo tên và SKU (không phân biệt hoa thường và dấu)
     if (query.search) {
+      const normalizedSearch = getSearchPattern(query.search);
       where.OR = [
-        { name: { contains: query.search, mode: "insensitive" } },
+        { name: { contains: normalizedSearch, mode: "insensitive" } },
         { sku: { contains: query.search, mode: "insensitive" } },
       ];
     }
@@ -254,10 +258,12 @@ export class ProductRepository implements IProductRepository {
   }
 
   // Lấy danh sách sản phẩm gom theo danh mục
-  async findGroupedByCategory(limit: number = 20): Promise<{category: any, products: Product[]}[]> {
+  async findGroupedByCategory(
+    limit: number = 20,
+  ): Promise<{ category: any; products: Product[] }[]> {
     // 1. Lấy tất cả danh mục đang hoạt động (có thể chỉ lấy những danh mục có sản phẩm tùy rules, bài này lấy hết)
     const categories = await this.prisma.category.findMany({
-      orderBy: { createdAt: "desc" }
+      orderBy: { createdAt: "desc" },
     });
 
     // 2. Fetch parallel top X products cho mỗi category
@@ -268,26 +274,25 @@ export class ProductRepository implements IProductRepository {
             deletedAt: null,
             status: "active",
             categories: {
-              some: { categoryId: category.id }
-            }
+              some: { categoryId: category.id },
+            },
           },
           orderBy: { createdAt: "desc" },
           take: limit,
           include: {
             images: { where: { isPrimary: true }, take: 1 },
-            categories: { include: { category: true } }
-          }
+            categories: { include: { category: true } },
+          },
         });
 
         return {
           category,
-          products
+          products,
         };
-      })
+      }),
     );
 
     // Xóa các mảng trống để giao diện mượt
-    return results.filter(group => group.products.length > 0);
+    return results.filter((group) => group.products.length > 0);
   }
 }
-

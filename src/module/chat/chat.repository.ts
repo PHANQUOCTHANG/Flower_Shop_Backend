@@ -1,6 +1,7 @@
 import { BaseQuery } from "@/utils/query";
 import { PrismaClient, Chat, Message } from "@prisma/client";
 import { AIService } from "@/module/chat/ai.service";
+import { getSearchPattern } from "@/utils/searchUtils";
 
 export interface IChatRepository {
   getOrCreateChat(userId: string, adminId?: string | null): Promise<Chat>;
@@ -66,8 +67,7 @@ export class ChatRepository implements IChatRepository {
         data: {
           lastMessageAt: new Date(),
           // Chỉ cập nhật adminId khi người gửi là admin thật (không phải AI)
-          ...(data.senderRole === "admin" &&
-          data.senderId !== AIService.AI_ID
+          ...(data.senderRole === "admin" && data.senderId !== AIService.AI_ID
             ? { adminId: data.senderId }
             : {}),
         },
@@ -114,15 +114,13 @@ export class ChatRepository implements IChatRepository {
     const where: any = {
       messages: { some: {} },
       // FIX #2: Loại trừ chat AI khỏi inbox admin, nhưng vẫn phải giữ lại các chat chưa có admin (adminId = null)
-      OR: [
-        { adminId: null },
-        { adminId: { not: AIService.AI_ID } },
-      ],
+      OR: [{ adminId: null }, { adminId: { not: AIService.AI_ID } }],
     };
 
     if (query.search) {
+      const normalizedSearch = getSearchPattern(query.search);
       where.user = {
-        fullName: { contains: query.search, mode: "insensitive" },
+        fullName: { contains: normalizedSearch, mode: "insensitive" },
       };
     }
 

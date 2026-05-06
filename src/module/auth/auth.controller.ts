@@ -9,7 +9,10 @@ import { Request, Response } from "express";
 const getCookieOptions = (expiresAt?: Date) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax" | "strict",
+  sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as
+    | "none"
+    | "lax"
+    | "strict",
   path: "/",
   ...(expiresAt && { expires: expiresAt }),
 });
@@ -17,8 +20,16 @@ const getCookieOptions = (expiresAt?: Date) => ({
 /**
  * Hàm bổ trợ để gửi Token và User đồng nhất
  */
-const sendAuthResponse = (res: Response, result: any, statusCode: number = 200) => {
-  const cookieOptions = getCookieOptions(result.refreshTokenExpiresAt);
+const sendAuthResponse = (
+  res: Response,
+  result: any,
+  statusCode: number = 200,
+) => {
+  console.log("Remember Me (Server):", result.rememberMe);
+  const expiresAt = result.rememberMe 
+    ? result.refreshTokenExpiresAt
+    : undefined;
+  const cookieOptions = getCookieOptions(expiresAt);
 
   // 1. Refresh Token (Bảo mật cao)
   res.cookie("refreshToken", result.refreshToken, cookieOptions);
@@ -48,6 +59,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 // POST | /api/auth/login
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.login(req.body);
+
   sendAuthResponse(res, result, 200);
 });
 
@@ -99,14 +111,18 @@ export const verifyOtp = asyncHandler(async (req: Request, res: Response) => {
 });
 
 // POST | /api/auth/reset-password
-export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
-  await authService.resetPassword(req.body);
-  res.status(204).send();
-});
+export const resetPassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    await authService.resetPassword(req.body);
+    res.status(204).send();
+  },
+);
 
 // POST | /api/auth/change-password
-export const changePassword = asyncHandler(async (req: Request, res: Response) => {
-  const userId = getUserId(req);
-  await authService.changePassword(userId, req.body);
-  res.status(204).send();
-});
+export const changePassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = getUserId(req);
+    await authService.changePassword(userId, req.body);
+    res.status(204).send();
+  },
+);

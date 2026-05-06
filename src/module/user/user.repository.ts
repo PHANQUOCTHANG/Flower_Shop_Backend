@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma, User } from "@prisma/client";
 import { BaseQuery, IPaginatedResult } from "@/utils/query";
+import { getSearchPattern } from "@/utils/searchUtils";
 
 export interface IUserRepository {
   create(data: Prisma.UserCreateInput): Promise<User>;
@@ -29,12 +30,17 @@ export class UserRepository implements IUserRepository {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
 
-    // Xây dựng điều kiện tìm kiếm
+    // Xây dựng điều kiện tìm kiếm (không phân biệt hoa thường và dấu)
     const where: Prisma.UserWhereInput = {
       deletedAt: null, // Chỉ lấy user chưa bị xóa mềm
       ...(query.search && {
         OR: [
-          { fullName: { contains: query.search, mode: "insensitive" } },
+          {
+            fullName: {
+              contains: getSearchPattern(query.search),
+              mode: "insensitive",
+            },
+          },
           { email: { contains: query.search, mode: "insensitive" } },
         ],
       }),

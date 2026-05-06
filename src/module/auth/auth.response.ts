@@ -5,12 +5,13 @@ export class AuthResponseDto {
   accessToken: string;
   refreshToken: string;
   refreshTokenExpiresAt: Date; // Thời điểm hết hạn để controller set cookie chính xác
-
+  rememberMe: boolean;
   user: {
     id: string;
     fullName: string;
     email: string;
     role: UserRole;
+    phone?: string | null;
     avatar?: string | null;
   };
 
@@ -19,16 +20,19 @@ export class AuthResponseDto {
     accessToken: string,
     refreshToken: string,
     refreshTokenExpiresAt: Date,
+    rememberMe: boolean,
   ) {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
     this.refreshTokenExpiresAt = refreshTokenExpiresAt;
+    this.rememberMe = rememberMe;
 
     this.user = {
       id: user.id,
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      phone: user.phone,
       avatar: user.avatar,
     };
   }
@@ -38,7 +42,8 @@ export class AuthResponseDto {
     accessToken: string,
     refreshToken: string,
     refreshTokenExpiresAt: Date,
+    rememberMe: boolean,
   ): AuthResponseDto {
-    return new AuthResponseDto(user, accessToken, refreshToken, refreshTokenExpiresAt);
+    return new AuthResponseDto(user, accessToken, refreshToken, refreshTokenExpiresAt, rememberMe);
   }
 }

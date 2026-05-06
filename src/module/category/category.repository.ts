@@ -1,5 +1,6 @@
 import { PrismaClient, Category, Prisma } from "@prisma/client";
 import { BaseQuery, IPaginatedResult } from "@/utils/query";
+import { getSearchPattern } from "@/utils/searchUtils";
 
 export interface ICategoryRepository {
   create(data: Prisma.CategoryCreateInput): Promise<Category>;
@@ -29,7 +30,7 @@ export class CategoryRepository implements ICategoryRepository {
     const where: Prisma.CategoryWhereInput = {
       deletedAt: null,
       ...(query.search && {
-        name: { contains: query.search, mode: "insensitive" },
+        name: { contains: getSearchPattern(query.search), mode: "insensitive" },
       }),
     };
 

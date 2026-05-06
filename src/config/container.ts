@@ -96,8 +96,12 @@ export const cartService: ICartService = new CartService(
 );
 
 // ActivityLog (khai báo trước Order vì OrderService phụ thuộc vào nó)
-const activityLogRepository: IActivityLogRepository = new ActivityLogRepository(prisma);
-export const activityLogService: IActivityLogService = new ActivityLogService(activityLogRepository);
+const activityLogRepository: IActivityLogRepository = new ActivityLogRepository(
+  prisma,
+);
+export const activityLogService: IActivityLogService = new ActivityLogService(
+  activityLogRepository,
+);
 
 // Order
 const orderRepository: IOrderRepository = new OrderRepository(prisma);
@@ -106,12 +110,16 @@ export const orderService: IOrderService = new OrderService(
   cartRepository,
   userRepository,
   activityLogService,
+  emailService,
 );
 export const imageService = new ImageService();
 
 // Chat
 const chatRepository: IChatRepository = new ChatRepository(prisma);
-export const chatService: IChatService = new ChatService(chatRepository , prisma);
+export const chatService: IChatService = new ChatService(
+  chatRepository,
+  prisma,
+);
 
 // Address
 const addressRepository: IAddressRepository = new AddressRepository(prisma);

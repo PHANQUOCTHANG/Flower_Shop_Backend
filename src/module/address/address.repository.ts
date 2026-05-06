@@ -6,7 +6,7 @@ import type {
 } from "./address.request";
 
 export interface IAddressRepository {
-  findByUserId(userId: string): Promise<Address[]>;
+  findByUserId(userId: string, limit?: number): Promise<Address[]>;
   findById(id: string): Promise<Address | null>;
   create(userId: string, data: CreateAddressRequest): Promise<Address>;
   update(
@@ -22,10 +22,11 @@ export interface IAddressRepository {
 export class AddressRepository implements IAddressRepository {
   constructor(private readonly prisma: PrismaClient) {}
   // Lấy tất cả địa chỉ của một người dùng (sắp xếp default trước)
-  async findByUserId(userId: string): Promise<Address[]> {
+  async findByUserId(userId: string, limit?: number ): Promise<Address[]> {
     return this.prisma.address.findMany({
       where: { userId },
       orderBy: { isDefault: "desc" },
+      take: limit,
     });
   }
 

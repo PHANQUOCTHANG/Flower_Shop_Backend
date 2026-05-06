@@ -8,7 +8,7 @@ import type { AddressResponse } from "./address.response";
 import AppError from "@/utils/appError";
 
 export interface IAddressService {
-  getAddresses(userId: string): Promise<AddressResponse[]>;
+  getAddresses(userId: string , limit?: number): Promise<AddressResponse[]>;
   getAddress(id: string, userId: string): Promise<AddressResponse>;
   createAddress(
     userId: string,
@@ -27,8 +27,8 @@ export class AddressService implements IAddressService {
   constructor(private readonly repository: IAddressRepository) {}
 
   // Lấy tất cả địa chỉ của người dùng
-  async getAddresses(userId: string): Promise<AddressResponse[]> {
-    const addresses = await this.repository.findByUserId(userId);
+  async getAddresses(userId: string, limit?: number): Promise<AddressResponse[]> {
+    const addresses = await this.repository.findByUserId(userId, limit);
     return addresses.map(toAddressResponse);
   }
 
