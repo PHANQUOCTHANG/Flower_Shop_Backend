@@ -24,6 +24,7 @@ interface AuthResult {
   refreshToken: string;
   refreshTokenExpiresAt: Date; // <-- thêm mới
   user: any;
+  rememberMe: boolean;
 }
 
 export interface IAuthService {
@@ -63,6 +64,7 @@ export class AuthService implements IAuthService {
       result.accessToken,
       result.refreshToken,
       result.refreshTokenExpiresAt, // <-- truyền xuống DTO
+      result.rememberMe,
     );
   }
 
@@ -79,17 +81,33 @@ export class AuthService implements IAuthService {
     if (!user.isActive)
       throw new AppError("Tài khoản đã bị khóa hoặc chưa kích hoạt", 403);
 
-    const result = await this.generateAuthResult(user, dto.rememberMe || false);
+    const result = await this.generateAuthResult(user, dto.rememberMe);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
       result.refreshToken,
       result.refreshTokenExpiresAt,
+      result.rememberMe,
     );
   }
 
   async refresh(refreshToken: string): Promise<AuthResponseDto> {
     if (!refreshToken) throw new AppError("Không tìm thấy Refresh Token", 401);
+
+    const refreshSecret = process.env.JWT_REFRESH_SECRET;
+    
+    // 1. Giải mã token để lấy payload
+    let decoded: any;
+    try {
+        decoded = jwt.verify(refreshToken, refreshSecret as string);
+    } catch (err) {
+        throw new AppError("Refresh Token không hợp lệ hoặc đã hết hạn", 401);
+    }
+
+    // 2. Lấy giá trị remember từ payload (Giả sử lúc Login Thắng lưu là { remember: boolean })
+    const isRememberMe = !!decoded.rememberMe;
+
+    console.log("Decoded Refresh Token Payload:", decoded);
 
     const cacheKey = `${this.CACHE_KEY_REFRESH}${refreshToken}`;
     let userId = await getCache<string>(cacheKey);
@@ -108,12 +126,13 @@ export class AuthService implements IAuthService {
       deleteCache(cacheKey),
     ]);
 
-    const result = await this.generateAuthResult(user);
+    const result = await this.generateAuthResult(user, isRememberMe);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
       result.refreshToken,
       result.refreshTokenExpiresAt,
+      result.rememberMe,
     );
   }
 
@@ -162,6 +181,7 @@ export class AuthService implements IAuthService {
       result.accessToken,
       result.refreshToken,
       result.refreshTokenExpiresAt,
+      result.rememberMe,
     );
   }
 
@@ -206,7 +226,7 @@ export class AuthService implements IAuthService {
     const userIdStr = user.id.toString();
 
     const accessToken = jwt.sign(
-      { userId: userIdStr, role: user.role },
+      { userId: userIdStr, role: user.role , rememberMe},
       accessSecret,
       { expiresIn: "15m" },
     );
@@ -218,7 +238,7 @@ export class AuthService implements IAuthService {
     // Tính chính xác một lần, dùng lại nhất quán ở cả DB, Redis, và cookie
     const refreshTokenExpiresAt = new Date(Date.now() + refreshTokenTTL);
 
-    const refreshToken = jwt.sign({ userId: userIdStr }, refreshSecret, {
+    const refreshToken = jwt.sign({ userId: userIdStr , rememberMe }, refreshSecret, {
       expiresIn: rememberMe ? "14d" : "1d",
     });
 
@@ -235,6 +255,12 @@ export class AuthService implements IAuthService {
       ),
     ]);
 
-    return { accessToken, refreshToken, refreshTokenExpiresAt, user };
+    return {
+      accessToken,
+      refreshToken,
+      refreshTokenExpiresAt,
+      user,
+      rememberMe ,
+    };
   }
 }

@@ -12,7 +12,8 @@ import { getUserId } from "@/helpers/getUserId";
 export const getAddresses = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
-    const addresses = await addressService.getAddresses(userId);
+    const limit = parseInt(req.query.limit as string) || 6;
+    const addresses = await addressService.getAddresses(userId , limit);
 
     return res
       .status(200)
