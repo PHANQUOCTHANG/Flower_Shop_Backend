@@ -349,7 +349,17 @@ export class OrderRepository implements IOrderRepository {
   // Danh sách khách hàng
   async findAllCustomers(
     query: any,
-  ): Promise<IPaginatedResult<any> | { newCustomersThisMonth: number }> {
+  ): Promise<
+    IPaginatedResult<any> & {
+      newCustomersThisMonth: number;
+      totalVIP: number;
+      totalGold: number;
+      totalSilver: number;
+      totalBronze: number;
+      activeCustomers: number;
+      totalElements: number;
+    }
+  > {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
 
@@ -417,7 +427,7 @@ export class OrderRepository implements IOrderRepository {
       ]),
     );
 
-    const customerStats = users
+    let customerStats = users
       .map((user) => {
         const stats = statsMap.get(user.id) ?? {
           totalSpent: 0,
@@ -431,6 +441,26 @@ export class OrderRepository implements IOrderRepository {
         };
       })
       .filter((u) => u.totalSpent > 0);
+
+    // Tính toán thống kê toàn cục trước khi áp dụng bộ lọc tier
+    const totalVIP = customerStats.filter((c) => c.totalSpent >= 20000000).length;
+    const totalGold = customerStats.filter((c) => c.totalSpent >= 10000000 && c.totalSpent < 20000000).length;
+    const totalSilver = customerStats.filter((c) => c.totalSpent >= 5000000 && c.totalSpent < 10000000).length;
+    const totalBronze = customerStats.filter((c) => c.totalSpent < 5000000).length;
+
+    const activeCustomers = customerStats.filter((c) => c.isActive).length;
+    const totalElements = customerStats.length;
+
+    // Áp dụng bộ lọc hạng thẻ (tier) nếu có
+    if (query.tier && query.tier !== "Tất cả") {
+      customerStats = customerStats.filter((c) => {
+        let tier = "Đồng";
+        if (c.totalSpent >= 20000000) tier = "VIP";
+        else if (c.totalSpent >= 10000000) tier = "Vàng";
+        else if (c.totalSpent >= 5000000) tier = "Bạc";
+        return tier === query.tier;
+      });
+    }
 
     // Sắp xếp theo tham số query
     let sorted = customerStats;
@@ -505,6 +535,12 @@ export class OrderRepository implements IOrderRepository {
       limit,
       totalPages: Math.ceil(customerStats.length / limit),
       newCustomersThisMonth,
+      totalVIP,
+      totalGold,
+      totalSilver,
+      totalBronze,
+      activeCustomers,
+      totalElements,
     };
   }
 

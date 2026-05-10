@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import asyncHandler from "@/utils/asyncHandler";
 import { ApiResponse } from "@/utils/apiResponse";
 import { addressService } from "@/config/container";
+import { normalizeQuery } from "@/utils/query";
 import type {
   CreateAddressRequest,
   UpdateAddressRequest,
@@ -12,12 +13,10 @@ import { getUserId } from "@/helpers/getUserId";
 export const getAddresses = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
-    const limit = parseInt(req.query.limit as string) || 6;
-    const addresses = await addressService.getAddresses(userId , limit);
+    const query = normalizeQuery(req.query);
+    const result = await addressService.getAddresses(userId, query);
 
-    return res
-      .status(200)
-      .json(ApiResponse.success(addresses, "Lấy danh sách địa chỉ thành công"));
+    return res.status(200).json(ApiResponse.paginate(result));
   },
 );
 

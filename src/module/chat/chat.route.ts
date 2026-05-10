@@ -3,6 +3,7 @@ import * as chatController from "./chat.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
 import { SendMessageSchema, SendAIMessageSchema, ChatIdParamSchema } from "./chat.request";
 import { requireRole } from "@/middleware/auth.middleware";
+import { uploadChatMedia } from "@/middleware/upload.middleware";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const router = Router();
 // Lấy thông tin phòng chat với admin
 router.get("/me", chatController.getMyChat);
 
-// Gửi tin nhắn cho admin
+// Gửi tin nhắn cho admin (hỗ trợ kèm file)
 router.post(
   "/me/messages",
   validationMiddleware(SendMessageSchema),
@@ -26,6 +27,9 @@ router.post(
   chatController.userSendMessageToAI,
 );
 
+// Upload media cho chat (cả user và admin)
+router.post("/upload", uploadChatMedia, chatController.uploadChatMedia);
+
 // --- ROUTES CHO ADMIN ---
 
 // Lấy danh sách inbox (không bao gồm AI chat — đã filter ở repository)
@@ -35,7 +39,7 @@ router.get(
   chatController.getAdminChatList,
 );
 
-// Phản hồi tin nhắn
+// Phản hồi tin nhắn (hỗ trợ kèm file)
 router.post(
   "/:id/messages",
   requireRole("ADMIN"),

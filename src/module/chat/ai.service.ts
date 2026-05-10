@@ -12,8 +12,10 @@ if (!process.env.GROQ_API_KEY) {
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY ?? "" });
 
 // Groq free tier: 30 RPM / 14,400 RPD toàn server
-// Model: llama-3.3-70b-versatile — chất lượng tốt, tiếng Việt ổn
+// Model text: llama-3.3-70b-versatile — chất lượng tốt, tiếng Việt ổn
 const GROQ_MODEL = "llama-3.3-70b-versatile";
+// Model vision: llama-4-scout hỗ trợ phân tích hình ảnh thực sự
+const GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
 
 export class AIService {
   static readonly AI_ID = "00000000-0000-0000-0000-000000000000";
@@ -48,6 +50,8 @@ export class AIService {
     prisma: PrismaClient,
     chatId: string,
     userMessage: string,
+    mediaUrl?: string,
+    mediaType?: string,
   ): Promise<string> {
     try {
       const systemInstruction = await AIService.buildSystemInstruction(prisma);
@@ -63,24 +67,26 @@ export class AIService {
       // Đảo lại đúng thứ tự thời gian (cũ → mới)
       const history = historyRecords.reverse();
 
+      // Xác định có phân tích ảnh hay không
+      const hasImage = mediaType === "image" && !!mediaUrl;
+      const model = hasImage ? GROQ_VISION_MODEL : GROQ_MODEL;
+
       // Build messages array theo chuẩn OpenAI / Groq
       const messages: Groq.Chat.ChatCompletionMessageParam[] = [
         { role: "system", content: systemInstruction },
-        ...history.map((m) => ({
-          role:
-            m.senderId === AIService.AI_ID
-              ? ("assistant" as const)
-              : ("user" as const),
-          content: m.content,
+        ...history.map((m): Groq.Chat.ChatCompletionMessageParam => ({
+          role: m.senderId === AIService.AI_ID ? "assistant" : "user",
+          content: m.content || "[Tệp đính kèm]",
         })),
-        { role: "user", content: userMessage },
+        // Tin nhắn hiện tại: kèm ảnh nếu có
+        AIService.buildUserMessage(userMessage, mediaUrl, mediaType),
       ];
 
       const completion = await groq.chat.completions.create({
-        model: GROQ_MODEL,
+        model,
         messages,
-        max_tokens: 512, // Giới hạn output để tiết kiệm token
-        temperature: 0.6, // Ít ngẫu nhiên hơn → trả lời chuẩn hơn
+        max_tokens: hasImage ? 1024 : 512, // Vision cần token nhiều hơn để mô tả chi tiết
+        temperature: 0.6,
       });
 
       return (
@@ -91,6 +97,37 @@ export class AIService {
       console.error("[AIService] Error:", error?.message ?? error);
       return AIService.handleError(error);
     }
+  }
+
+  /**
+   * Xây dựng user message — multimodal nếu có ảnh, plain text nếu không
+   */
+  private static buildUserMessage(
+    textContent: string,
+    mediaUrl?: string,
+    mediaType?: string,
+  ): Groq.Chat.ChatCompletionMessageParam {
+    if (mediaType === "image" && mediaUrl) {
+      // Groq vision format: content là array của text + image_url
+      const parts: any[] = [
+        {
+          type: "image_url",
+          image_url: { url: mediaUrl },
+        },
+      ];
+      if (textContent) {
+        parts.unshift({ type: "text", text: textContent });
+      } else {
+        parts.push({
+          type: "text",
+          text: "Đây là mẫu hoa tôi đang quan tâm, bạn hãy phân tích ảnh này và đối chiếu với danh sách sản phẩm hiện tại của shop để tư vấn giúp tôi nhé.",
+        });
+      }
+      return { role: "user", content: parts };
+    }
+
+    // Video / file / thuần text
+    return { role: "user", content: textContent || "[Tệp đính kèm]" };
   }
 
   /**
@@ -509,7 +546,21 @@ Khi phù hợp, lồng ghép tự nhiên (không đọc như quảng cáo):
 Chỉ dùng thông tin THẬT từ dữ liệu shop — không bịa số liệu.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- PHẦN 15 · CHECKLIST TRƯỚC KHI GỬI — KIỂM TRA 30 GIÂY
+ PHẦN 15 · XỬ LÝ KHI KHÁCH GỬI HÌNH ẢNH (VISION)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Khi khách gửi hình ảnh, TUYỆT ĐỐI tuân thủ các bước sau:
+1. Phân tích loại hoa, màu sắc, và phong cách của mẫu trong ảnh.
+2. Đối chiếu CHỈ với danh sách sản phẩm hiện tại của shop (Phần 4). KHÔNG TỰ BỊA RA SẢN PHẨM HOẶC GIÁ.
+3. KHÔNG trả lời lan man về ý nghĩa các loài hoa hay lịch sử trừ khi khách hỏi. Đi thẳng vào việc tư vấn sản phẩm của shop.
+4. Nếu shop CÓ mẫu y hệt hoặc GẦN GIỐNG (dựa vào loại hoa chính, màu sắc):
+   → Giới thiệu mẫu đó kèm giá và lý do phù hợp.
+5. Nếu shop KHÔNG CÓ mẫu nào tương tự:
+   → Xin lỗi khéo léo và chủ động giới thiệu 2-3 mẫu ĐẸP NHẤT của shop cùng tone màu hoặc cùng dịp sử dụng.
+   → Mẫu: "Dạ mẫu trong ảnh đẹp quá, nhưng hiện tại shop em chưa có mẫu y hệt thế này ạ. Bù lại em có mấy mẫu tone [màu đó] cũng rất xinh, anh/chị xem thử nhé!"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ PHẦN 16 · CHECKLIST TRƯỚC KHI GỬI — KIỂM TRA 30 GIÂY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Trước mỗi phản hồi, xác nhận:

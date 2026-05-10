@@ -2,7 +2,7 @@
 
 Backend API for an **online flower shop e-commerce system**, built with **Node.js, Express.js, TypeScript, Prisma ORM, and PostgreSQL**.
 
-The system provides a complete backend solution including authentication, product management, shopping cart, order processing, real-time chat, and admin operations.
+The system provides a complete backend solution including authentication, product management, shopping cart, order processing, asynchronous job queuing, real-time chat with rich media support, and admin operations.
 
 ---
 
@@ -15,15 +15,16 @@ The system provides a complete backend solution including authentication, produc
 | TypeScript | Strongly typed JavaScript |
 | PostgreSQL | Relational database |
 | Prisma ORM | Modern ORM for database access |
-| Redis | Caching and session storage |
+| Redis | Caching, session storage, and BullMQ job queue backend |
+| BullMQ | Distributed job queue for asynchronous order processing |
 | JWT | Authentication and authorization |
 | Bcrypt | Password hashing |
 | Zod | Request validation |
-| Cloudinary | Image storage service |
+| Cloudinary | Image and media file storage |
 | Nodemailer | Email sending service |
-| Socket.io | Real-time communication |
+| Socket.io | Real-time bidirectional communication |
 | Swagger / OpenAPI | API documentation |
-| Winston | Logging system |
+| Winston | Structured logging system |
 
 ---
 
@@ -31,14 +32,17 @@ The system provides a complete backend solution including authentication, produc
 
 | Feature | Description |
 |---|---|
-| Authentication | User registration, login, OTP email verification, and refresh tokens |
-| User Management | Profile management and role-based access control |
+| Authentication | User registration, login, OTP email verification, social login, and refresh token rotation |
+| User Management | Profile management and role-based access control (RBAC) |
 | Product Management | Create, update, delete products with categories and images |
 | Shopping Cart | Add, remove, and update cart items |
 | Order Management | Create orders and track order status |
+| Async Order Processing | BullMQ job queues with rate limiting to handle high-concurrency checkout safely |
 | Reviews | Product rating and review system |
-| Real-time Chat | Customer and admin chat using Socket.io |
-| Admin Dashboard | Manage products, orders, and users |
+| Real-time Chat | Customer and admin chat using Socket.io with rich media support |
+| Rich Media Messages | Upload and render images, videos, and file attachments in chat (with `mediaName` & `mediaSize` metadata) |
+| Redis Caching | Cache frequently accessed data to reduce database load and improve scalability |
+| Admin Dashboard | Manage products, orders, users, and support chats |
 
 ---
 
@@ -51,7 +55,7 @@ The system supports multiple authentication mechanisms:
 - Social login (Google, Facebook)
 - JWT access tokens
 - Refresh token rotation
-- Role-based access control
+- Role-based access control (RBAC)
 
 ### User Roles
 
@@ -60,6 +64,31 @@ CUSTOMER
 ADMIN
 STAFF
 ```
+
+---
+
+# ⚡ Asynchronous Order Processing
+
+Orders are processed through a **BullMQ** job queue backed by **Redis**, ensuring:
+
+- **High-concurrency safety** — checkout requests are queued and processed serially per user
+- **Rate limiting** — prevents abuse during flash sales or peak traffic
+- **Real-time status updates** — order processing state is pushed to the client via **Socket.IO**
+- **Retry & failure handling** — failed jobs are automatically retried with configurable backoff
+
+---
+
+---
+
+# 💬 Real-time Chat with Rich Media
+
+The chat system is built on **Socket.IO** and supports:
+
+- **Text messages** between customers and admin/staff
+- **File attachments** — images, videos, and documents uploaded via Cloudinary
+- **Rich file cards** — messages include `mediaName`, `mediaSize`, and `mediaType` metadata for Zalo-style rendering in the UI
+- **Multi-room chat** — isolated chat rooms per customer session
+- **Real-time delivery** — instant message push via WebSocket
 
 ---
 
@@ -77,11 +106,13 @@ src/
 │   ├── category/         → Product categories
 │   ├── cart/             → Shopping cart
 │   ├── order/            → Order processing
-│   └── review/           → Product reviews
+│   ├── review/           → Product reviews
+│   └── chat/             → Real-time chat & rich media
 │
 ├── middleware/           → Auth, validation, error handling
 ├── lib/                  → Prisma, Redis, Cloudinary
 ├── utils/                → Helper functions
+├── jobs/                 → BullMQ job definitions and processors
 └── socket/               → Socket.io handlers
 ```
 
@@ -105,7 +136,7 @@ src/
 | Order | Customer orders |
 | OrderItem | Order item details |
 | Chat | Chat rooms |
-| Message | Chat messages |
+| Message | Chat messages (text + rich media metadata) |
 
 ---
 
@@ -142,7 +173,7 @@ Create a `.env` file in the root directory.
 | JWT_REFRESH_SECRET | JWT refresh token secret |
 | CLOUDINARY_API_KEY | Cloudinary API key |
 | CLOUDINARY_SECRET | Cloudinary secret |
-| REDIS_URL | Redis connection string |
+| REDIS_URL | Redis connection string (used by BullMQ and caching) |
 | EMAIL_USER | Email service user |
 | EMAIL_PASS | Email service password |
 
@@ -249,6 +280,9 @@ git push
 | POST | /api/cart | Add item to cart |
 | POST | /api/orders | Create order |
 | GET | /api/users/profile | Get user profile |
+| POST | /api/chat/upload | Upload media file to chat |
+| GET | /api/chat/:roomId/messages | Get paginated chat messages |
+| POST | /api/webhook/facebook | Facebook webhook event receiver |
 
 Full API documentation is available at:
 

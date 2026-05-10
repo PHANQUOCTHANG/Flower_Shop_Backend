@@ -163,19 +163,28 @@ export class AuthService implements IAuthService {
       throw new AppError("Mã OTP không hợp lệ hoặc chưa được xác thực", 400);
     }
 
+
+    const user = await this.userRepo.findByEmail(dto.email);
+
+    if (!user) throw new AppError("Người dùng không tồn tại", 404);
+    const checkChangePassword = await bcrypt.compare(dto.newPassword, user.password as string);
+    if (checkChangePassword) {
+      throw new AppError("Mật khẩu mới không được trùng với mật khẩu cũ", 400);
+    }
+
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
-    const user = await this.userRepo.updateByEmail(dto.email, {
+    const userUpdate = await this.userRepo.updateByEmail(dto.email, {
       password: hashedPassword,
     });
-    if (!user) throw new AppError("Người dùng không tồn tại", 404);
+    
 
     await Promise.all([
-      this.refreshRepo.revokeAllByUser(user.id),
+      this.refreshRepo.revokeAllByUser(userUpdate.id),
       this.otpRepo.deleteByEmail(dto.email),
       deleteCache(`otp:${dto.email}`),
     ]);
 
-    const result = await this.generateAuthResult(user, false);
+    const result = await this.generateAuthResult(userUpdate, false);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,

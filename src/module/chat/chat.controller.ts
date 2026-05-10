@@ -9,7 +9,15 @@ import { BaseQuery, normalizeQuery } from "@/utils/query";
 export const userSendMessage = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = getUserId(req);
-    const data = await chatService.userSendMessage(userId, req.body);
+    const body = {
+      content: req.body.content,
+      mediaUrl: req.body.mediaUrl,
+      mediaPublicId: req.body.mediaPublicId,
+      mediaType: req.body.mediaType,
+      mediaName: req.body.mediaName,
+      mediaSize: req.body.mediaSize,
+    };
+    const data = await chatService.userSendMessage(userId, body);
     return res
       .status(201)
       .json(ApiResponse.success(data, "Gửi tin nhắn thành công"));
@@ -21,7 +29,15 @@ export const adminSendMessage = asyncHandler(
   async (req: Request, res: Response) => {
     const adminId = getUserId(req);
     const chatId = req.params.id as string;
-    const data = await chatService.adminSendMessage(adminId, chatId, req.body);
+    const body = {
+      content: req.body.content,
+      mediaUrl: req.body.mediaUrl,
+      mediaPublicId: req.body.mediaPublicId,
+      mediaType: req.body.mediaType,
+      mediaName: req.body.mediaName,
+      mediaSize: req.body.mediaSize,
+    };
+    const data = await chatService.adminSendMessage(adminId, chatId, body);
     return res
       .status(201)
       .json(ApiResponse.success(data, "Admin phản hồi thành công"));
@@ -78,4 +94,26 @@ export const getMyAIChat = asyncHandler(async (req: Request, res: Response) => {
   const userId = getUserId(req);
   const data = await chatService.getMyAIChat(userId);
   return res.status(200).json(ApiResponse.success(data));
+});
+
+// [POST] /api/v1/chats/upload
+// Upload media lên Cloudinary và trả về URL + mediaType
+export const uploadChatMedia = asyncHandler(async (req: Request, res: Response) => {
+  const file = req.file as any;
+  if (!file) {
+    return res.status(400).json(ApiResponse.error("Không có file nào được tải lên"));
+  }
+
+  const mime = file.mimetype as string;
+  let mediaType: "image" | "video" | "file" = "file";
+  if (mime.startsWith("image/")) mediaType = "image";
+  else if (mime.startsWith("video/")) mediaType = "video";
+
+  return res.status(200).json(ApiResponse.success({
+    url: file.path,
+    publicId: file.filename,
+    mediaType,
+    originalName: file.originalname,
+    size: file.size,
+  }, "Upload thành công"));
 });
