@@ -8,7 +8,7 @@ export interface IUserRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
   updateById(id: string, data: Prisma.UserUpdateInput): Promise<User | null>;
-  updateByEmail(email: string, data: any): Promise<User | null>;
+  updateByEmail(email: string, data: any): Promise<User>;
   softDelete(id: string): Promise<void>;
 }
 
@@ -94,7 +94,7 @@ export class UserRepository implements IUserRepository {
   }
 
   // Cập nhật người dùng theo email (dùng cho Reset Password)
-  async updateByEmail(email: string, data: any): Promise<User | null> {
+  async updateByEmail(email: string, data: any): Promise<User> {
     return this.prisma.user.update({
       where: { email },
       data,

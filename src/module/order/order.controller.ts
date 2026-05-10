@@ -50,8 +50,6 @@ export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
   const userId = getUserId(req);
   const result = await orderService.findByUserId(userId, query);
 
-  console.log("User orders:", result);
-
   return res.status(200).json(ApiResponse.paginate(result));
 });
 

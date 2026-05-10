@@ -9,7 +9,12 @@ export interface IChatRepository {
     chatId: string;
     senderId: string;
     senderRole: string;
-    content: string;
+    content?: string;
+    mediaUrl?: string;
+    mediaPublicId?: string;
+    mediaType?: string;
+    mediaName?: string;
+    mediaSize?: number;
   }): Promise<Message>;
   getMessages(chatId: string, query: any): Promise<any>;
   findAll(query: BaseQuery): Promise<any>;
@@ -57,7 +62,12 @@ export class ChatRepository implements IChatRepository {
     chatId: string;
     senderId: string;
     senderRole: string;
-    content: string;
+    content?: string;
+    mediaUrl?: string;
+    mediaPublicId?: string;
+    mediaType?: string;
+    mediaName?: string;
+    mediaSize?: number;
   }): Promise<Message> {
     return this.prisma.$transaction(async (tx) => {
       const message = await tx.message.create({ data });

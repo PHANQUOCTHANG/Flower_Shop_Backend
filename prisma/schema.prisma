@@ -302,13 +302,18 @@ model Chat {
 }
 
 model Message {
-  id         String   @id @default(uuid()) @db.Uuid
-  chatId     String   @map("chat_id") @db.Uuid
-  senderId   String   @map("sender_id")
-  senderRole String   @map("sender_role") @db.VarChar(10)
-  content    String   @db.Text
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
-  isRead     Boolean  @default(false) @map("is_read")
+  id            String   @id @default(uuid()) @db.Uuid
+  chatId        String   @map("chat_id") @db.Uuid
+  senderId      String   @map("sender_id")
+  senderRole    String   @map("sender_role") @db.VarChar(10)
+  content       String?  @db.Text
+  mediaUrl      String?  @map("media_url") @db.Text
+  mediaPublicId String?  @map("media_public_id") @db.VarChar(255)
+  mediaType     String?  @map("media_type") @db.VarChar(20)
+  mediaName     String?  @map("media_name") @db.VarChar(255)
+  mediaSize     Int?     @map("media_size")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  isRead        Boolean  @default(false) @map("is_read")
 
   chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender User @relation(fields: [senderId], references: [id])

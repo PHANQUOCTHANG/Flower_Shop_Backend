@@ -1,7 +1,6 @@
 import AppError from "@/utils/appError";
 import { IChatRepository } from "./chat.repository";
 import { MessageResponseDto, ChatResponseDto } from "./chat.response";
-import { SendMessageDto } from "./chat.request";
 import { getIO } from "@/config/socket";
 import { getCache, setCache, deleteCacheByPattern } from "@/utils/cache";
 import { BaseQuery } from "@/utils/query";
@@ -11,12 +10,12 @@ import { PrismaClient } from "@prisma/client";
 export interface IChatService {
   userSendMessage(
     userId: string,
-    dto: SendMessageDto,
+    dto: { content?: string; mediaUrl?: string; mediaPublicId?: string; mediaType?: string; mediaName?: string; mediaSize?: number },
   ): Promise<MessageResponseDto>;
   adminSendMessage(
     adminId: string,
     chatId: string,
-    dto: SendMessageDto,
+    dto: { content?: string; mediaUrl?: string; mediaPublicId?: string; mediaType?: string; mediaName?: string; mediaSize?: number },
   ): Promise<MessageResponseDto>;
   getAdminChatList(query: BaseQuery): Promise<any>;
   getChatHistory(chatId: string, query: any): Promise<any>;
@@ -24,7 +23,7 @@ export interface IChatService {
   markAsRead(chatId: string): Promise<void>;
   userSendMessageToAI(
     userId: string,
-    dto: SendMessageDto,
+    dto: { content?: string; mediaUrl?: string; mediaPublicId?: string; mediaType?: string; mediaName?: string; mediaSize?: number },
   ): Promise<MessageResponseDto>;
   getMyAIChat(userId: string): Promise<ChatResponseDto>;
 }
@@ -40,7 +39,7 @@ export class ChatService implements IChatService {
 
   async userSendMessage(
     userId: string,
-    dto: SendMessageDto,
+    dto: { content?: string; mediaUrl?: string; mediaPublicId?: string; mediaType?: string; mediaName?: string; mediaSize?: number },
   ): Promise<MessageResponseDto> {
     const chat = await this.chatRepo.getOrCreateChat(userId);
 
@@ -49,6 +48,11 @@ export class ChatService implements IChatService {
       senderId: userId,
       senderRole: "user",
       content: dto.content,
+      mediaUrl: dto.mediaUrl,
+      mediaPublicId: dto.mediaPublicId,
+      mediaType: dto.mediaType,
+      mediaName: dto.mediaName,
+      mediaSize: dto.mediaSize,
     });
 
     const response = MessageResponseDto.from(message);
@@ -58,7 +62,12 @@ export class ChatService implements IChatService {
       .to("chat:admin")
       .emit("chat:inbox_update", {
         chatId: chat.id,
-        lastMessage: { content: dto.content, createdAt: response.createdAt },
+        lastMessage: { 
+          content: dto.content || "[Đính kèm]", 
+          createdAt: response.createdAt,
+          mediaUrl: response.mediaUrl,
+          mediaType: response.mediaType,
+        },
         fromUserId: userId,
       });
 
@@ -69,7 +78,7 @@ export class ChatService implements IChatService {
   async adminSendMessage(
     adminId: string,
     chatId: string,
-    dto: SendMessageDto,
+    dto: { content?: string; mediaUrl?: string; mediaPublicId?: string; mediaType?: string; mediaName?: string; mediaSize?: number },
   ): Promise<MessageResponseDto> {
     const chat = await this.chatRepo.findById(chatId);
     if (!chat) throw new AppError("Cuộc hội thoại không tồn tại", 404);
@@ -79,6 +88,11 @@ export class ChatService implements IChatService {
       senderId: adminId,
       senderRole: "admin",
       content: dto.content,
+      mediaUrl: dto.mediaUrl,
+      mediaPublicId: dto.mediaPublicId,
+      mediaType: dto.mediaType,
+      mediaName: dto.mediaName,
+      mediaSize: dto.mediaSize,
     });
 
     const response = MessageResponseDto.from(message);
@@ -86,8 +100,21 @@ export class ChatService implements IChatService {
     getIO().to(`chat:${chatId}`).emit("chat:new_message", response);
     getIO().to(`user:${chat.userId}`).emit("chat:notification", {
       chatId,
-      message: dto.content,
+      message: dto.content || "[Đính kèm]",
     });
+
+    getIO()
+      .to("chat:admin")
+      .emit("chat:inbox_update", {
+        chatId,
+        lastMessage: { 
+          content: dto.content || "[Đính kèm]", 
+          createdAt: response.createdAt,
+          mediaUrl: response.mediaUrl,
+          mediaType: response.mediaType,
+        },
+        fromUserId: adminId,
+      });
 
     await deleteCacheByPattern(`${this.CACHE_KEY}:admin:*`);
     return response;
@@ -128,24 +155,27 @@ export class ChatService implements IChatService {
 
   async userSendMessageToAI(
     userId: string,
-    dto: SendMessageDto,
+    dto: { content?: string; mediaUrl?: string; mediaPublicId?: string; mediaType?: string; mediaName?: string; mediaSize?: number },
   ): Promise<MessageResponseDto> {
     const chat = await this.chatRepo.getOrCreateChat(userId, AIService.AI_ID);
 
     // 1. Kiểm tra rate limit trước khi gọi AI
     const limited = await AIService.isRateLimited(userId);
     if (limited) {
-      // Lưu tin user nhưng trả về thông báo rate limit ngay, không gọi Gemini
       const userMsg = await this.chatRepo.createMessage({
         chatId: chat.id,
         senderId: userId,
         senderRole: "user",
         content: dto.content,
+        mediaUrl: dto.mediaUrl,
+        mediaPublicId: dto.mediaPublicId,
+        mediaType: dto.mediaType,
+        mediaName: dto.mediaName,
+        mediaSize: dto.mediaSize,
       });
       const userResponse = MessageResponseDto.from(userMsg);
       getIO().to(`chat:${chat.id}`).emit("chat:new_message", userResponse);
 
-      // Gửi thông báo rate limit như tin nhắn AI
       const rateLimitMsg = await this.chatRepo.createMessage({
         chatId: chat.id,
         senderId: AIService.AI_ID,
@@ -159,24 +189,41 @@ export class ChatService implements IChatService {
       return userResponse;
     }
 
-    // 2. Lưu tin nhắn user
+    // 2. Lưu tin nhắn user (bao gồm media nếu có)
     const userMsg = await this.chatRepo.createMessage({
       chatId: chat.id,
       senderId: userId,
       senderRole: "user",
       content: dto.content,
+      mediaUrl: dto.mediaUrl,
+      mediaPublicId: dto.mediaPublicId,
+      mediaType: dto.mediaType,
+      mediaName: dto.mediaName,
+      mediaSize: dto.mediaSize,
     });
 
     const userResponse = MessageResponseDto.from(userMsg);
     getIO().to(`chat:${chat.id}`).emit("chat:new_message", userResponse);
 
-    // 3. Gọi AI bất đồng bộ (non-blocking) — trả response về client ngay
-    AIService.getAIResponse(this.prisma, chat.id, dto.content)
+    // 3. Xây dựng nội dung gửi cho AI
+    // Nếu có media, mô tả file để AI có thể phản hồi phù hợp
+    let aiPrompt = dto.content || "";
+    if (dto.mediaUrl) {
+      const mediaDesc = dto.mediaType === "image"
+        ? `[Người dùng gửi ảnh: ${dto.mediaName || "hình ảnh"}]`
+        : dto.mediaType === "video"
+        ? `[Người dùng gửi video: ${dto.mediaName || "video"}]`
+        : `[Người dùng gửi file: ${dto.mediaName || "tài liệu"}]`;
+      aiPrompt = aiPrompt ? `${aiPrompt}\n${mediaDesc}` : mediaDesc;
+    }
+
+    // 4. Gọi AI bất đồng bộ (non-blocking)
+    AIService.getAIResponse(this.prisma, chat.id, aiPrompt, dto.mediaUrl, dto.mediaType)
       .then(async (aiContent) => {
         const aiMsg = await this.chatRepo.createMessage({
           chatId: chat.id,
           senderId: AIService.AI_ID,
-          senderRole: "ai", // Dùng "ai" thay vì "admin" để tránh nhầm lẫn
+          senderRole: "ai",
           content: aiContent,
         });
         getIO()
@@ -185,7 +232,6 @@ export class ChatService implements IChatService {
       })
       .catch((error) => {
         console.error("[ChatService] AI pipeline failed for chatId:", chat.id, error);
-        // Emit lỗi về client để UI không bị treo loading state
         getIO().to(`chat:${chat.id}`).emit("chat:ai_error", {
           chatId: chat.id,
           message: "Rosie gặp sự cố, vui lòng thử lại!",

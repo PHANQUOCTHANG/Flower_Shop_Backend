@@ -174,3 +174,98 @@ const reviewUpload = multer({
 
 // Upload media review (tối đa 5 file)
 export const uploadReviewMedia = reviewUpload.array("media", 5);
+
+// ─── Custom storage engine cho Chat Media ─────────────────────────────────────
+class CloudinaryChatStorage implements StorageEngine {
+  _handleFile(
+    _req: Request,
+    file: Express.Multer.File,
+    cb: (error?: any, info?: Partial<Express.Multer.File>) => void,
+  ): void {
+    const isVideo = file.mimetype.startsWith("video/");
+    const isImage = file.mimetype.startsWith("image/");
+
+    const uploadOptions: any = {
+      folder: "chat",
+      resource_type: isVideo ? "video" : isImage ? "image" : "raw",
+    };
+
+    // Tối ưu hóa ảnh, nhưng không resize video/file thô
+    if (isImage) {
+      uploadOptions.transformation = [
+        { width: 1280, height: 1280, crop: "limit", quality: "auto:good" },
+      ];
+    }
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error || !result) {
+          return cb(error ?? new Error("Upload chat media thất bại"));
+        }
+        cb(undefined, {
+          path: result.secure_url,
+          filename: result.public_id,
+        });
+      },
+    );
+
+    file.stream.pipe(uploadStream);
+  }
+
+  _removeFile(
+    _req: Request,
+    file: Express.Multer.File & { filename: string },
+    cb: (error: Error | null) => void,
+  ): void {
+    cloudinary.uploader.destroy(
+      file.filename,
+      { resource_type: "auto" },
+      (error) => { cb(error ?? null); },
+    );
+  }
+}
+
+// Kiểm tra loại file được phép cho Chat
+const chatFileFilter = (
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+): void => {
+  const ALLOWED_TYPES = [
+    // Ảnh
+    "image/jpeg", "image/png", "image/webp", "image/jpg", "image/gif",
+    // Video
+    "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo",
+    // Tài liệu
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+    // Nén
+    "application/zip",
+    "application/x-rar-compressed",
+    "application/x-7z-compressed",
+  ];
+
+  if (ALLOWED_TYPES.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new AppError(`Loại file "${file.mimetype}" không được hỗ trợ trong chat`, 400));
+  }
+};
+
+// Cấu hình multer cho chat media
+const chatUpload = multer({
+  storage: new CloudinaryChatStorage(),
+  fileFilter: chatFileFilter,
+  limits: {
+    fileSize: 30 * 1024 * 1024, // 30MB — cân bằng giữa hiệu năng và UX
+    files: 1,                   // Mỗi lần chỉ gửi 1 file
+  },
+});
+
+// Export middleware upload 1 file chat media
+export const uploadChatMedia = chatUpload.single("file");
