@@ -14,7 +14,7 @@ import settingRoute from "@/module/setting/setting.route";
 
 
 const clientRoute = (app: Application) => {
-  const path = "/api";
+  const path = "/api/v1";
   app.use(path + "/users", requireAuth, userRoute);
   app.use(path + "/products", productRoute);
   app.use(path + "/categories", categoryRoute);

@@ -1,0 +1,100 @@
+tags:
+  - name: Categories
+    description: APIs for Category management
+
+paths:
+  /api/v1/categories:
+    get:
+      summary: Lấy danh sách danh mục
+      tags: [Categories]
+      responses:
+        "200":
+          description: Lấy danh sách thành công
+
+    post:
+      summary: Tạo danh mục mới (Admin)
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                thumbnail:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Tạo thành công
+        "400":
+          description: Lỗi dữ liệu
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
+  /api/v1/categories/{id}:
+    patch:
+      summary: Cập nhật danh mục (Admin)
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                isActive:
+                  type: boolean
+                thumbnail:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Cập nhật thành công
+        "400":
+          description: Lỗi dữ liệu
+        "401":
+          description: Unauthorized
+        "404":
+          description: Không tìm thấy
+
+    delete:
+      summary: Xóa danh mục (Admin)
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa thành công
+        "401":
+          description: Unauthorized
+        "404":
+          description: Không tìm thấy

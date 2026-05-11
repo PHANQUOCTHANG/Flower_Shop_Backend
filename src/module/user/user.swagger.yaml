@@ -1,0 +1,150 @@
+tags:
+  - name: Users
+    description: APIs for User management (Admin only)
+
+paths:
+  /api/v1/users:
+    get:
+      summary: Lấy danh sách người dùng
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Trang hiện tại
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Số lượng trên mỗi trang
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Tìm kiếm theo tên hoặc email
+      responses:
+        "200":
+          description: Lấy danh sách thành công
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden (Không phải Admin)
+
+    post:
+      summary: Tạo người dùng mới
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [USER, ADMIN]
+                phone:
+                  type: string
+      responses:
+        "201":
+          description: Tạo thành công
+        "400":
+          description: Dữ liệu không hợp lệ
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
+  /api/v1/users/{id}:
+    get:
+      summary: Lấy thông tin chi tiết người dùng
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID của người dùng
+      responses:
+        "200":
+          description: Lấy thông tin thành công
+        "404":
+          description: Không tìm thấy người dùng
+        "401":
+          description: Unauthorized
+
+    patch:
+      summary: Cập nhật thông tin người dùng
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID của người dùng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                phone:
+                  type: string
+                role:
+                  type: string
+                  enum: [USER, ADMIN]
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Cập nhật thành công
+        "404":
+          description: Không tìm thấy người dùng
+        "400":
+          description: Dữ liệu không hợp lệ
+
+    delete:
+      summary: Xóa người dùng
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID của người dùng
+      responses:
+        "200":
+          description: Xóa thành công
+        "404":
+          description: Không tìm thấy người dùng
