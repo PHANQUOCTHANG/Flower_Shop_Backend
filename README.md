@@ -273,24 +273,26 @@ git push
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | /api/auth/register | Register new user |
-| POST | /api/auth/login | User login |
-| GET | /api/products | Get product list |
-| GET | /api/categories | Get product categories |
-| POST | /api/cart | Add item to cart |
-| POST | /api/orders | Create order |
-| GET | /api/users/profile | Get user profile |
-| POST | /api/chat/upload | Upload media file to chat |
-| GET | /api/chat/:roomId/messages | Get paginated chat messages |
-| POST | /api/webhook/facebook | Facebook webhook event receiver |
+| POST | /api/v1/auth/register | Register new user |
+| POST | /api/v1/auth/login | User login |
+| GET | /api/v1/products | Get product list |
+| GET | /api/v1/categories | Get product categories |
+| POST | /api/v1/cart/add | Add item to cart |
+| POST | /api/v1/orders | Create order |
+| GET | /api/v1/users/me | Get user profile |
+| POST | /api/v1/chats/upload | Upload media file to chat |
+| GET | /api/v1/chats/:roomId/messages | Get paginated chat messages |
 
-Full API documentation is available at:
+### 📖 API Documentation (Swagger)
 
-```
-/api-docs
-```
+Full interactive API documentation is automatically generated using Swagger UI.
+After starting the server, you can view the docs and test the endpoints directly at:
 
-(Swagger UI)
+👉 **[http://localhost:5000/api/docs](http://localhost:5000/api/docs)**
+
+- **Explore Endpoints:** All modules (Auth, Users, Products, Orders, etc.) are fully documented here.
+- **Testing:** You can test APIs directly from your browser.
+- **Authentication:** For secured routes, use the **Authorize** button at the top right to inject your `Bearer Token` (obtained from the login endpoint).
 
 ---
 

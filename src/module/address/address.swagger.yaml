@@ -1,0 +1,148 @@
+tags:
+  - name: Addresses
+    description: APIs for Address management
+
+paths:
+  /api/v1/addresses:
+    get:
+      summary: Lấy danh sách địa chỉ của người dùng
+      tags: [Addresses]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lấy danh sách thành công
+        "401":
+          description: Unauthorized
+
+    post:
+      summary: Tạo địa chỉ mới
+      tags: [Addresses]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - receiverName
+                - phone
+                - detail
+                - ward
+                - district
+                - province
+              properties:
+                receiverName:
+                  type: string
+                phone:
+                  type: string
+                detail:
+                  type: string
+                ward:
+                  type: string
+                district:
+                  type: string
+                province:
+                  type: string
+                isDefault:
+                  type: boolean
+      responses:
+        "201":
+          description: Tạo thành công
+        "400":
+          description: Lỗi dữ liệu
+        "401":
+          description: Unauthorized
+
+  /api/v1/addresses/{id}:
+    get:
+      summary: Lấy chi tiết địa chỉ
+      tags: [Addresses]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Thành công
+        "404":
+          description: Không tìm thấy địa chỉ
+
+    patch:
+      summary: Cập nhật địa chỉ
+      tags: [Addresses]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                receiverName:
+                  type: string
+                phone:
+                  type: string
+                detail:
+                  type: string
+                ward:
+                  type: string
+                district:
+                  type: string
+                province:
+                  type: string
+      responses:
+        "200":
+          description: Cập nhật thành công
+        "400":
+          description: Lỗi dữ liệu
+        "404":
+          description: Không tìm thấy địa chỉ
+
+    delete:
+      summary: Xóa địa chỉ
+      tags: [Addresses]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa thành công
+        "404":
+          description: Không tìm thấy địa chỉ
+
+  /api/v1/addresses/{id}/set-default:
+    patch:
+      summary: Đặt địa chỉ làm mặc định
+      tags: [Addresses]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cập nhật thành công
+        "404":
+          description: Không tìm thấy địa chỉ
