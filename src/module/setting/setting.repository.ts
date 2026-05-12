@@ -72,6 +72,15 @@ const DEFAULT_SETTINGS: Record<string, any> = {
         iconName: "Zap"
       }
     ]
+  },
+  paymentConfig: {
+    bankTransfer: {
+      bankName: "Ngân hàng TMCP Quân đội (MB)",
+      accountNumber: "0931838465",
+      accountName: "NGUYEN QUOC THANG",
+      branch: "Hồ Chí Minh",
+      qrCodeUrl: "https://img.vietqr.io/image/MB-0931838465-compact.png?amount=0&addInfo=Thanh+toan+don+hang"
+    }
   }
 };
 

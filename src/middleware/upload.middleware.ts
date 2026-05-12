@@ -269,3 +269,55 @@ const chatUpload = multer({
 
 // Export middleware upload 1 file chat media
 export const uploadChatMedia = chatUpload.single("file");
+
+// ─── Custom storage engine cho Setting Image ─────────────────────────────────────
+class CloudinarySettingStorage implements StorageEngine {
+  _handleFile(
+    _req: Request,
+    file: Express.Multer.File,
+    cb: (error?: any, info?: Partial<Express.Multer.File>) => void,
+  ): void {
+    const uploadOptions: any = {
+      folder: "settings",
+      allowed_formats: ["jpg", "jpeg", "png", "webp", "gif"],
+      transformation: [
+        { width: 1200, height: 1200, crop: "limit", quality: "auto:good" },
+      ],
+    };
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      uploadOptions,
+      (error, result) => {
+        if (error || !result) {
+          return cb(error ?? new Error("Upload setting image thất bại"));
+        }
+        cb(undefined, {
+          path: result.secure_url,
+          filename: result.public_id,
+        });
+      },
+    );
+
+    file.stream.pipe(uploadStream);
+  }
+
+  _removeFile(
+    _req: Request,
+    file: Express.Multer.File & { filename: string },
+    cb: (error: Error | null) => void,
+  ): void {
+    cloudinary.uploader.destroy(file.filename, (error) => {
+      cb(error ?? null);
+    });
+  }
+}
+
+const settingUpload = multer({
+  storage: new CloudinarySettingStorage(),
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+});
+
+export const uploadSettingImage = settingUpload.single("image");
