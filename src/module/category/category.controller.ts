@@ -25,6 +25,7 @@ export const getCategories = asyncHandler(
   async (req: Request, res: Response): Promise<Response> => {
     const query = req.query;
     const result = await categoryService.findAll(query);
+    console.log("Query params:", query);
 
     return res.status(200).json(ApiResponse.paginate(result));
   },

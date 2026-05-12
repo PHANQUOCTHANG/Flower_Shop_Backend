@@ -22,6 +22,21 @@ class SettingController {
       next(error);
     }
   };
+
+  uploadImage = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json(ApiResponse.error("Không có file nào được tải lên"));
+      }
+
+      return res.status(200).json(ApiResponse.success({
+        url: req.file.path,
+        publicId: req.file.filename
+      }, "Upload ảnh thành công"));
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 export default new SettingController();
