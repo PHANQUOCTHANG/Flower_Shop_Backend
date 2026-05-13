@@ -1,0 +1,108 @@
+tags:
+  - name: Carts
+    description: APIs for Cart management
+
+paths:
+  /api/v1/cart:
+    get:
+      summary: Lấy thông tin giỏ hàng của tôi
+      tags: [Carts]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Thành công
+        "401":
+          description: Unauthorized
+
+  /api/v1/cart/add:
+    post:
+      summary: Thêm sản phẩm vào giỏ hàng
+      tags: [Carts]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - productId
+                - quantity
+              properties:
+                productId:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Thêm thành công
+        "400":
+          description: Lỗi dữ liệu
+        "401":
+          description: Unauthorized
+
+  /api/v1/cart/update:
+    patch:
+      summary: Cập nhật số lượng sản phẩm trong giỏ
+      tags: [Carts]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - productId
+                - quantity
+              properties:
+                productId:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Cập nhật thành công
+        "400":
+          description: Lỗi dữ liệu
+        "401":
+          description: Unauthorized
+        "404":
+          description: Không tìm thấy sản phẩm trong giỏ
+
+  /api/v1/cart/items/{productId}:
+    delete:
+      summary: Xóa một sản phẩm khỏi giỏ
+      tags: [Carts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Xóa thành công
+        "401":
+          description: Unauthorized
+        "404":
+          description: Không tìm thấy sản phẩm trong giỏ
+
+  /api/v1/cart/clear:
+    delete:
+      summary: Làm trống giỏ hàng
+      tags: [Carts]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Làm trống thành công
+        "401":
+          description: Unauthorized

@@ -2,7 +2,7 @@
 
 Backend API for an **online flower shop e-commerce system**, built with **Node.js, Express.js, TypeScript, Prisma ORM, and PostgreSQL**.
 
-The system provides a complete backend solution including authentication, product management, shopping cart, order processing, real-time chat, and admin operations.
+The system provides a complete backend solution including authentication, product management, shopping cart, order processing, asynchronous job queuing, real-time chat with rich media support, and admin operations.
 
 ---
 
@@ -15,17 +15,16 @@ The system provides a complete backend solution including authentication, produc
 | TypeScript | Strongly typed JavaScript |
 | PostgreSQL | Relational database |
 | Prisma ORM | Modern ORM for database access |
-| Redis | Caching and session storage |
-| BullMQ | Distributed task queue for background jobs |
+| Redis | Caching, session storage, and BullMQ job queue backend |
+| BullMQ | Distributed job queue for asynchronous order processing |
 | JWT | Authentication and authorization |
 | Bcrypt | Password hashing |
 | Zod | Request validation |
-| Cloudinary | Image storage service |
+| Cloudinary | Image and media file storage |
 | Nodemailer | Email sending service |
-| Socket.io | Real-time communication |
+| Socket.io | Real-time bidirectional communication |
 | Swagger / OpenAPI | API documentation |
-| Winston | Logging system |
-| Helmet & Rate Limit | API security and brute-force protection |
+| Winston | Structured logging system |
 
 ---
 
@@ -33,16 +32,17 @@ The system provides a complete backend solution including authentication, produc
 
 | Feature | Description |
 |---|---|
-| Authentication | User registration, login, OTP email verification, and refresh tokens |
+| Authentication | User registration, login, OTP email verification, social login, and refresh token rotation |
 | User Management | Profile management and role-based access control (RBAC) |
-| System Settings | Admin-configurable shop info, banners, and payment settings (Bank/QR) |
-| Product Management | Create, update, delete products with categories and multi-image uploads |
-| Shopping Cart | Add, remove, and update cart items with persistence |
-| Order Management | Create orders, track status, and manage processing queue via BullMQ |
-| Verified Reviews | Product rating system with media (images/videos) for confirmed buyers |
-| Activity Logging | Systematic tracking of admin actions and sensitive system events |
-| Real-time Chat | Customer-admin chat with rich media support and Zalo-style file cards |
-| API Security | Implemented rate limiting, secure headers, and robust CORS policies |
+| Product Management | Create, update, delete products with categories and images |
+| Shopping Cart | Add, remove, and update cart items |
+| Order Management | Create orders and track order status |
+| Async Order Processing | BullMQ job queues with rate limiting to handle high-concurrency checkout safely |
+| Reviews | Product rating and review system |
+| Real-time Chat | Customer and admin chat using Socket.io with rich media support |
+| Rich Media Messages | Upload and render images, videos, and file attachments in chat (with `mediaName` & `mediaSize` metadata) |
+| Redis Caching | Cache frequently accessed data to reduce database load and improve scalability |
+| Admin Dashboard | Manage products, orders, users, and support chats |
 
 ---
 
@@ -53,8 +53,8 @@ The system supports multiple authentication mechanisms:
 - Email & Password login
 - Email OTP verification for registration and recovery
 - Social login (Google, Facebook)
-- JWT access tokens with short TTL
-- Refresh token rotation and invalidation
+- JWT access tokens
+- Refresh token rotation
 - Role-based access control (RBAC)
 
 ### User Roles
@@ -64,6 +64,31 @@ CUSTOMER
 ADMIN
 STAFF
 ```
+
+---
+
+# ⚡ Asynchronous Order Processing
+
+Orders are processed through a **BullMQ** job queue backed by **Redis**, ensuring:
+
+- **High-concurrency safety** — checkout requests are queued and processed serially per user
+- **Rate limiting** — prevents abuse during flash sales or peak traffic
+- **Real-time status updates** — order processing state is pushed to the client via **Socket.IO**
+- **Retry & failure handling** — failed jobs are automatically retried with configurable backoff
+
+---
+
+---
+
+# 💬 Real-time Chat with Rich Media
+
+The chat system is built on **Socket.IO** and supports:
+
+- **Text messages** between customers and admin/staff
+- **File attachments** — images, videos, and documents uploaded via Cloudinary
+- **Rich file cards** — messages include `mediaName`, `mediaSize`, and `mediaType` metadata for Zalo-style rendering in the UI
+- **Multi-room chat** — isolated chat rooms per customer session
+- **Real-time delivery** — instant message push via WebSocket
 
 ---
 
@@ -79,16 +104,16 @@ src/
 │   ├── user/             → User management & RBAC
 │   ├── product/          → Product management
 │   ├── category/         → Product categories
-│   ├── cart/             → Shopping cart logic
-│   ├── order/            → Order processing & BullMQ workers
-│   ├── review/           → Verified reviews with media
-│   ├── setting/          → Dynamic system configuration
-│   └── activity-log/     → Audit trails for admin actions
+│   ├── cart/             → Shopping cart
+│   ├── order/            → Order processing
+│   ├── review/           → Product reviews
+│   └── chat/             → Real-time chat & rich media
 │
-├── middleware/           → Auth, validation, error handling, Rate Limit
-├── lib/                  → Prisma, Redis, Cloudinary configuration
-├── utils/                → Helper functions, AppError, and caching
-└── socket/               → Socket.io handlers for real-time chat
+├── middleware/           → Auth, validation, error handling
+├── lib/                  → Prisma, Redis, Cloudinary
+├── utils/                → Helper functions
+├── jobs/                 → BullMQ job definitions and processors
+└── socket/               → Socket.io handlers
 ```
 
 ---
@@ -115,7 +140,7 @@ src/
 | SystemSetting | Key-value store for app configuration |
 | ActivityLog | Log of system and admin activities |
 | Chat | Chat rooms |
-| Message | Chat messages with media metadata |
+| Message | Chat messages (text + rich media metadata) |
 
 ---
 
@@ -152,7 +177,7 @@ Create a `.env` file in the root directory.
 | JWT_REFRESH_SECRET | JWT refresh token secret |
 | CLOUDINARY_API_KEY | Cloudinary API key |
 | CLOUDINARY_SECRET | Cloudinary secret |
-| REDIS_URL | Redis connection string |
+| REDIS_URL | Redis connection string (used by BullMQ and caching) |
 | EMAIL_USER | Email service user |
 | EMAIL_PASS | Email service password |
 
@@ -252,21 +277,26 @@ git push
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | /api/auth/register | Register new user |
-| POST | /api/auth/login | User login |
-| GET | /api/products | Get product list |
-| GET | /api/categories | Get product categories |
-| POST | /api/cart | Add item to cart |
-| POST | /api/orders | Create order |
-| GET | /api/users/profile | Get user profile |
+| POST | /api/v1/auth/register | Register new user |
+| POST | /api/v1/auth/login | User login |
+| GET | /api/v1/products | Get product list |
+| GET | /api/v1/categories | Get product categories |
+| POST | /api/v1/cart/add | Add item to cart |
+| POST | /api/v1/orders | Create order |
+| GET | /api/v1/users/me | Get user profile |
+| POST | /api/v1/chats/upload | Upload media file to chat |
+| GET | /api/v1/chats/:roomId/messages | Get paginated chat messages |
 
-Full API documentation is available at:
+### 📖 API Documentation (Swagger)
 
-```
-/api-docs
-```
+Full interactive API documentation is automatically generated using Swagger UI.
+After starting the server, you can view the docs and test the endpoints directly at:
 
-(Swagger UI)
+👉 **[http://localhost:5000/api/docs](http://localhost:5000/api/docs)**
+
+- **Explore Endpoints:** All modules (Auth, Users, Products, Orders, etc.) are fully documented here.
+- **Testing:** You can test APIs directly from your browser.
+- **Authentication:** For secured routes, use the **Authorize** button at the top right to inject your `Bearer Token` (obtained from the login endpoint).
 
 ---
 

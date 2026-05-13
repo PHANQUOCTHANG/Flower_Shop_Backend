@@ -1,5 +1,10 @@
 import type { IAddressRepository } from "./address.repository";
 import { toAddressResponse } from "./address.response";
+import {
+  normalizeQuery,
+  type BaseQuery,
+  type IPaginatedResult,
+} from "@/utils/query";
 import type {
   CreateAddressRequest,
   UpdateAddressRequest,
@@ -8,7 +13,10 @@ import type { AddressResponse } from "./address.response";
 import AppError from "@/utils/appError";
 
 export interface IAddressService {
-  getAddresses(userId: string): Promise<AddressResponse[]>;
+  getAddresses(
+    userId: string,
+    query: BaseQuery,
+  ): Promise<IPaginatedResult<AddressResponse>>;
   getAddress(id: string, userId: string): Promise<AddressResponse>;
   createAddress(
     userId: string,
@@ -26,10 +34,27 @@ export interface IAddressService {
 export class AddressService implements IAddressService {
   constructor(private readonly repository: IAddressRepository) {}
 
-  // Lấy tất cả địa chỉ của người dùng
-  async getAddresses(userId: string): Promise<AddressResponse[]> {
-    const addresses = await this.repository.findByUserId(userId);
-    return addresses.map(toAddressResponse);
+  // Lấy tất cả địa chỉ của người dùng với phân trang
+  async getAddresses(
+    userId: string,
+    query: BaseQuery,
+  ): Promise<IPaginatedResult<AddressResponse>> {
+    const page = query.page || 1;
+    const limit = query.limit || 10;
+    const skip = (page - 1) * limit;
+
+    const [addresses, total] = await Promise.all([
+      this.repository.findByUserId(userId, skip, limit),
+      this.repository.countByUserId(userId),
+    ]);
+
+    return {
+      data: addresses.map(toAddressResponse),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   // Lấy chi tiết một địa chỉ (với permission check)

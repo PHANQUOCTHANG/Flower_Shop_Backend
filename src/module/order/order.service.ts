@@ -12,6 +12,7 @@ import {
 import { IUserRepository } from "@/module/user/user.repository";
 import { OrderQuery } from "./order.type";
 import { IActivityLogService } from "@/module/activity-log/activity-log.service";
+import { IEmailService } from "@/module/auth/email/email.service";
 import { getIO } from "@/config/socket";
 import { DashboardStats } from "./order.repository";
 
@@ -35,17 +36,18 @@ export class OrderService implements IOrderService {
   private readonly CACHE_KEY = "orders";
   private readonly PRODUCT_CACHE_KEY = "products";
   private readonly CART_CACHE_KEY = "cart";
-  private readonly CACHE_TTL_USER_LIST = 600;    // 10 phút
-  private readonly CACHE_TTL_DETAIL = 900;        // 15 phút
-  private readonly CACHE_TTL_ADMIN_LIST = 120;    // 2 phút
+  private readonly CACHE_TTL_USER_LIST = 600; // 10 phút
+  private readonly CACHE_TTL_DETAIL = 900; // 15 phút
+  private readonly CACHE_TTL_ADMIN_LIST = 120; // 2 phút
   private readonly CACHE_TTL_CUSTOMER_LIST = 300; // 5 phút
-  private readonly CACHE_TTL_DASHBOARD = 300;     // 5 phút - dashboard (refresh mỗi 5 phút)
+  private readonly CACHE_TTL_DASHBOARD = 300; // 5 phút - dashboard (refresh mỗi 5 phút)
 
   constructor(
     private readonly orderRepo: IOrderRepository,
     private readonly cartRepo: ICartRepository,
     private readonly userRepo: IUserRepository,
     private readonly activityLogService: IActivityLogService,
+    private readonly emailService: IEmailService,
   ) {}
 
   // Quy trình checkout: Kiểm tra giỏ -> Khóa giá -> Tạo đơn -> Làm trống giỏ
@@ -116,6 +118,30 @@ export class OrderService implements IOrderService {
         deleteCache(`${this.PRODUCT_CACHE_KEY}:id:${item.productId}`),
       ),
     ]);
+
+    // Gửi email xác nhận đơn hàng cho khách hàng
+    const user = await this.userRepo.findById(userId);
+    console.log("User email for order confirmation:", user?.email); // Log email để debug
+    if (user?.email) {
+      try {
+        // Fetch order với đầy đủ thông tin sản phẩm để gửi email
+        const fullOrder = await this.orderRepo.findById(order.id);
+        if (fullOrder) {
+          await this.emailService.sendOrderConfirmation(user.email, {
+            orderId: fullOrder.id,
+            customerName: user.fullName || "Khách hàng",
+            totalPrice: fullOrder.totalPrice,
+            shippingAddress: fullOrder.shippingAddress,
+            shippingPhone: fullOrder.shippingPhone,
+            items: fullOrder.items || [],
+            createdAt: fullOrder.createdAt,
+          });
+        }
+      } catch (error) {
+        // Log lỗi email nhưng không fail order
+        console.error("Failed to send order confirmation email:", error);
+      }
+    }
 
     return OrderResponseDto.from(order);
   }
@@ -213,17 +239,26 @@ export class OrderService implements IOrderService {
   }
 
   // Khách hàng tự hủy đơn hàng
-  async cancelOrder(orderId: string, userId: string): Promise<OrderResponseDto> {
+  async cancelOrder(
+    orderId: string,
+    userId: string,
+  ): Promise<OrderResponseDto> {
     const order = await this.orderRepo.findById(orderId);
     if (!order || order.userId !== userId) {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
-    
+
     if (order.status !== "pending") {
-      throw new AppError("Chỉ có thể hủy đơn hàng khi ở trạng thái chờ xử lý", 400);
+      throw new AppError(
+        "Chỉ có thể hủy đơn hàng khi ở trạng thái chờ xử lý",
+        400,
+      );
     }
 
-    const updatedOrder = await this.orderRepo.updateStatus(orderId, "cancelled");
+    const updatedOrder = await this.orderRepo.updateStatus(
+      orderId,
+      "cancelled",
+    );
     if (!updatedOrder) {
       throw new AppError("Không thể hủy đơn hàng", 500);
     }
@@ -306,7 +341,7 @@ export class OrderService implements IOrderService {
   // Dashboard stats (admin) — cache 5 phút
   async getDashboardStats(): Promise<DashboardStats> {
     const cacheKey = `${this.CACHE_KEY}:dashboard:stats`;
-    const cached   = await getCache<DashboardStats>(cacheKey);
+    const cached = await getCache<DashboardStats>(cacheKey);
     if (cached) return cached;
 
     const stats = await this.orderRepo.getDashboardStats();

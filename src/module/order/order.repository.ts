@@ -1,6 +1,8 @@
 import { PrismaClient, Order, Prisma } from "@prisma/client";
 import { IPaginatedResult } from "@/utils/query";
 import { OrderQuery } from "./order.type";
+import { getSearchPattern } from "@/utils/searchUtils";
+import { OrderResponseDto } from "@/module/order/order.response";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -22,7 +24,11 @@ export interface DashboardStats {
   // Doanh thu theo từng ngày trong tháng hiện tại
   revenueByDay: { date: string; revenue: number; orders: number }[];
   // Phân bố danh mục sản phẩm (theo số lượng bán)
-  categoryDistribution: { name: string; quantity: number; percentage: number }[];
+  categoryDistribution: {
+    name: string;
+    quantity: number;
+    percentage: number;
+  }[];
   // Top sản phẩm bán chạy nhất tháng hiện tại
   topProducts: {
     productId: string;
@@ -36,7 +42,7 @@ export interface DashboardStats {
 export interface IOrderRepository {
   createOrder(data: any): Promise<Order>;
   findAll(query: OrderQuery): Promise<IPaginatedResult<Order>>;
-  findById(id: string): Promise<Order | null>;
+  findById(id: string): Promise<any | null>;
   findByUserId(
     userId: string,
     query: OrderQuery,
@@ -101,7 +107,6 @@ export class OrderRepository implements IOrderRepository {
     });
   }
 
-
   // Lấy danh sách đơn hàng (admin) với phân trang và lọc
   async findAll(query: OrderQuery): Promise<IPaginatedResult<Order>> {
     const page = Math.max(query.page ?? 1, 1);
@@ -134,12 +139,23 @@ export class OrderRepository implements IOrderRepository {
       }
     }
 
-    // Tìm kiếm toàn văn bản
+    // Tìm kiếm toàn văn bản (không phân biệt hoa thường và dấu)
     if (query.search) {
+      const normalizedSearch = getSearchPattern(query.search);
+
+      // Sử dụng raw SQL để hỗ trợ search không phân biệt dấu
+      // Nếu PostgreSQL có extension unaccent, sẽ dùng; không thì fallback sang ILIKE
       where.OR = [
         { id: { contains: query.search, mode: "insensitive" } },
-        { shippingPhone: { contains: query.search } },
-        { user: { fullName: { contains: query.search, mode: "insensitive" } } },
+        { shippingPhone: { contains: query.search, mode: "insensitive" } },
+        {
+          user: {
+            fullName: {
+              contains: normalizedSearch,
+              mode: "insensitive",
+            },
+          },
+        },
       ];
     }
 
@@ -186,7 +202,7 @@ export class OrderRepository implements IOrderRepository {
   }
 
   // Chi tiết đơn hàng
-  async findById(id: string): Promise<Order | null> {
+  async findById(id: string): Promise<any | null> {
     return this.prisma.order.findUnique({
       where: { id },
       include: {
@@ -333,7 +349,17 @@ export class OrderRepository implements IOrderRepository {
   // Danh sách khách hàng
   async findAllCustomers(
     query: any,
-  ): Promise<IPaginatedResult<any> | { newCustomersThisMonth: number }> {
+  ): Promise<
+    IPaginatedResult<any> & {
+      newCustomersThisMonth: number;
+      totalVIP: number;
+      totalGold: number;
+      totalSilver: number;
+      totalBronze: number;
+      activeCustomers: number;
+      totalElements: number;
+    }
+  > {
     const page = Math.max(query.page ?? 1, 1);
     const limit = Math.min(query.limit ?? 10, 100);
 
@@ -343,10 +369,11 @@ export class OrderRepository implements IOrderRepository {
       role: "CUSTOMER",
     };
 
-    // Search by name or email
+    // Search by name or email (không phân biệt hoa thường và dấu)
     if (query.search) {
+      const normalizedSearch = getSearchPattern(query.search);
       where.OR = [
-        { fullName: { contains: query.search, mode: "insensitive" } },
+        { fullName: { contains: normalizedSearch, mode: "insensitive" } },
         { email: { contains: query.search, mode: "insensitive" } },
       ];
     }
@@ -400,7 +427,7 @@ export class OrderRepository implements IOrderRepository {
       ]),
     );
 
-    const customerStats = users
+    let customerStats = users
       .map((user) => {
         const stats = statsMap.get(user.id) ?? {
           totalSpent: 0,
@@ -414,6 +441,26 @@ export class OrderRepository implements IOrderRepository {
         };
       })
       .filter((u) => u.totalSpent > 0);
+
+    // Tính toán thống kê toàn cục trước khi áp dụng bộ lọc tier
+    const totalVIP = customerStats.filter((c) => c.totalSpent >= 20000000).length;
+    const totalGold = customerStats.filter((c) => c.totalSpent >= 10000000 && c.totalSpent < 20000000).length;
+    const totalSilver = customerStats.filter((c) => c.totalSpent >= 5000000 && c.totalSpent < 10000000).length;
+    const totalBronze = customerStats.filter((c) => c.totalSpent < 5000000).length;
+
+    const activeCustomers = customerStats.filter((c) => c.isActive).length;
+    const totalElements = customerStats.length;
+
+    // Áp dụng bộ lọc hạng thẻ (tier) nếu có
+    if (query.tier && query.tier !== "Tất cả") {
+      customerStats = customerStats.filter((c) => {
+        let tier = "Đồng";
+        if (c.totalSpent >= 20000000) tier = "VIP";
+        else if (c.totalSpent >= 10000000) tier = "Vàng";
+        else if (c.totalSpent >= 5000000) tier = "Bạc";
+        return tier === query.tier;
+      });
+    }
 
     // Sắp xếp theo tham số query
     let sorted = customerStats;
@@ -488,6 +535,12 @@ export class OrderRepository implements IOrderRepository {
       limit,
       totalPages: Math.ceil(customerStats.length / limit),
       newCustomersThisMonth,
+      totalVIP,
+      totalGold,
+      totalSilver,
+      totalBronze,
+      activeCustomers,
+      totalElements,
     };
   }
 
@@ -498,11 +551,27 @@ export class OrderRepository implements IOrderRepository {
 
     // Khoảng tháng hiện tại
     const curStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const curEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const curEnd = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
 
     // Khoảng tháng trước
     const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const prevEnd = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
 
     // ── Chạy tất cả queries song song để tối ưu latency ──
     const [
@@ -519,13 +588,19 @@ export class OrderRepository implements IOrderRepository {
     ] = await Promise.all([
       // 1. Doanh thu tháng hiện tại (chỉ completed)
       this.prisma.order.aggregate({
-        where: { status: "completed", createdAt: { gte: curStart, lte: curEnd } },
+        where: {
+          status: "completed",
+          createdAt: { gte: curStart, lte: curEnd },
+        },
         _sum: { totalPrice: true },
       }),
 
       // 2. Doanh thu tháng trước (chỉ completed)
       this.prisma.order.aggregate({
-        where: { status: "completed", createdAt: { gte: prevStart, lte: prevEnd } },
+        where: {
+          status: "completed",
+          createdAt: { gte: prevStart, lte: prevEnd },
+        },
         _sum: { totalPrice: true },
       }),
 
@@ -546,7 +621,10 @@ export class OrderRepository implements IOrderRepository {
 
       // 6. Đơn chờ xử lý tháng trước
       this.prisma.order.count({
-        where: { status: "pending", createdAt: { gte: prevStart, lte: prevEnd } },
+        where: {
+          status: "pending",
+          createdAt: { gte: prevStart, lte: prevEnd },
+        },
       }),
 
       // 7. Khách hàng mới tháng hiện tại (user có order đầu tiên trong tháng)
@@ -630,10 +708,10 @@ export class OrderRepository implements IOrderRepository {
     let totalQty = 0;
 
     topItems.forEach((item) => {
-      const product  = productMap.get(item.productId);
-      const catName  = product?.categories?.[0]?.category?.name ?? "Khác";
-      const qty      = item._sum.quantity ?? 0;
-      totalQty      += qty;
+      const product = productMap.get(item.productId);
+      const catName = product?.categories?.[0]?.category?.name ?? "Khác";
+      const qty = item._sum.quantity ?? 0;
+      totalQty += qty;
 
       const existing = categoryMap.get(catName);
       if (existing) {
@@ -647,33 +725,36 @@ export class OrderRepository implements IOrderRepository {
       .sort((a, b) => b.quantity - a.quantity)
       .map((cat) => ({
         ...cat,
-        percentage: totalQty > 0 ? Math.round((cat.quantity / totalQty) * 100) : 0,
+        percentage:
+          totalQty > 0 ? Math.round((cat.quantity / totalQty) * 100) : 0,
       }));
 
     // ── Revenue by day — điền đầy đủ các ngày trong tháng ──
     const daysInMonth = curEnd.getDate();
-    const revenueMap  = new Map(
+    const revenueMap = new Map(
       dailyOrders.map((d) => [d.day, { revenue: d.revenue, orders: d.orders }]),
     );
 
     const revenueByDay = Array.from({ length: daysInMonth }, (_, i) => {
       const date = new Date(curStart.getFullYear(), curStart.getMonth(), i + 1);
-      const key  = date.toISOString().slice(0, 10);
+      const key = date.toISOString().slice(0, 10);
       const data = revenueMap.get(key);
       return {
         date: key,
         revenue: data?.revenue ?? 0,
-        orders:  data?.orders  ?? 0,
+        orders: data?.orders ?? 0,
       };
     });
 
     // ── Tính khách hàng mới (user đặt hàng lần đầu trong tháng đó) ──
-    const curUserIds  = new Set(curRevenueAgg  ? curNewCustomers.map((u) => u.userId) : []);
+    const curUserIds = new Set(
+      curRevenueAgg ? curNewCustomers.map((u) => u.userId) : [],
+    );
     const prevUserIds = new Set(prevNewCustomers.map((u) => u.userId));
 
     // Khách hàng mới = user có lần đặt đầu trong tháng hiện tại và chưa từng đặt trước đó
-    const usersInCurMonth  = curNewCustomers.map((u) => u.userId);
-    const newCurCustomers  = usersInCurMonth.length;
+    const usersInCurMonth = curNewCustomers.map((u) => u.userId);
+    const newCurCustomers = usersInCurMonth.length;
     const newPrevCustomers = prevNewCustomers.length;
 
     void curUserIds;
@@ -681,15 +762,15 @@ export class OrderRepository implements IOrderRepository {
 
     return {
       currentMonth: {
-        totalRevenue:  Number(curRevenueAgg._sum.totalPrice  ?? 0),
-        totalOrders:   curOrderCount,
-        newCustomers:  newCurCustomers,
+        totalRevenue: Number(curRevenueAgg._sum.totalPrice ?? 0),
+        totalOrders: curOrderCount,
+        newCustomers: newCurCustomers,
         pendingOrders: curPendingCount,
       },
       prevMonth: {
-        totalRevenue:  Number(prevRevenueAgg._sum.totalPrice ?? 0),
-        totalOrders:   prevOrderCount,
-        newCustomers:  newPrevCustomers,
+        totalRevenue: Number(prevRevenueAgg._sum.totalPrice ?? 0),
+        totalOrders: prevOrderCount,
+        newCustomers: newPrevCustomers,
         pendingOrders: prevPendingCount,
       },
       revenueByDay,

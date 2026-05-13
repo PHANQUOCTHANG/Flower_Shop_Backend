@@ -1,0 +1,179 @@
+tags:
+  - name: Auth
+    description: APIs for authentication and authorization
+
+paths:
+  /api/v1/auth/register:
+    post:
+      summary: Đăng ký tài khoản mới
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+                name:
+                  type: string
+                phone:
+                  type: string
+      responses:
+        "201":
+          description: Đăng ký thành công
+        "400":
+          description: Dữ liệu không hợp lệ hoặc email đã tồn tại
+
+  /api/v1/auth/login:
+    post:
+      summary: Đăng nhập
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Đăng nhập thành công
+        "401":
+          description: Sai email hoặc mật khẩu
+
+  /api/v1/auth/refresh-token:
+    post:
+      summary: Làm mới Access Token
+      tags: [Auth]
+      responses:
+        "200":
+          description: Cấp token mới thành công
+        "401":
+          description: Refresh token không hợp lệ hoặc đã hết hạn
+
+  /api/v1/auth/logout:
+    post:
+      summary: Đăng xuất
+      tags: [Auth]
+      responses:
+        "200":
+          description: Đăng xuất thành công
+
+  /api/v1/auth/forgot-password/send-otp:
+    post:
+      summary: Gửi OTP khôi phục mật khẩu
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Gửi OTP thành công
+
+  /api/v1/auth/forgot-password/verify-otp:
+    post:
+      summary: Xác thực OTP khôi phục mật khẩu
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+      responses:
+        "200":
+          description: Xác thực OTP thành công
+        "400":
+          description: OTP không hợp lệ hoặc đã hết hạn
+
+  /api/v1/auth/forgot-password/reset-password:
+    post:
+      summary: Đặt lại mật khẩu mới
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+                - newPassword
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 6
+      responses:
+        "200":
+          description: Đặt lại mật khẩu thành công
+
+  /api/v1/auth/change-password:
+    post:
+      summary: Thay đổi mật khẩu (Cần đăng nhập)
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - oldPassword
+                - newPassword
+              properties:
+                oldPassword:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 6
+      responses:
+        "200":
+          description: Đổi mật khẩu thành công
+        "401":
+          description: Unauthorized
+        "400":
+          description: Mật khẩu cũ không đúng

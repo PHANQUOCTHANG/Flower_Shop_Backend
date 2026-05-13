@@ -10,6 +10,7 @@ import {
   deleteCache,
   deleteCacheByPattern,
 } from "@/utils/cache";
+import { AIService } from "@/module/chat/ai.service";
 
 export interface IProductService {
   create(dto: CreateProductDto): Promise<ProductResponseDto>;
@@ -46,10 +47,11 @@ export class ProductService implements IProductService {
       slug,
     });
 
-    // Xóa cache danh sách và hiển thị trang chủ (sản phẩm mới được thêm)
+    // Xóa cache danh sách, trang chủ và AI knowledge cache
     await Promise.all([
       deleteCacheByPattern(`${this.CACHE_KEY}:list:*`),
       deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`),
+      AIService.invalidateKnowledgeCache(),
     ]);
 
     return ProductResponseDto.from(product);
@@ -146,12 +148,13 @@ export class ProductService implements IProductService {
       throw new AppError("Cập nhật sản phẩm thất bại", 500);
     }
 
-    // Xóa cache liên quan
+    // Xóa cache liên quan và cache của AI
     const cacheInvalidations = [
       deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Cache chi tiết slug cũ
       deleteCacheByPattern(`${this.CACHE_KEY}:list:*`), // Cache danh sách (giá/thông tin thay đổi)
       deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`), // Cache hiển thị nhóm danh mục trang chủ
+      AIService.invalidateKnowledgeCache(),
     ];
 
     // Nếu slug thay đổi, xóa cache slug mới
@@ -177,12 +180,13 @@ export class ProductService implements IProductService {
     // Đánh dấu xóa mềm
     await this.productRepo.softDelete(id);
 
-    // Xóa cache liên quan
+    // Xóa cache liên quan và cache của AI
     await Promise.all([
       deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
       deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Cache chi tiết slug
       deleteCacheByPattern(`${this.CACHE_KEY}:list:*`), // Cache danh sách (bị ảnh hưởng bởi xóa)
       deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`), // Xóa luôn grouped cache
+      AIService.invalidateKnowledgeCache(),
     ]);
   }
 

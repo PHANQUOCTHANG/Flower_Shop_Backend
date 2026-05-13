@@ -3,7 +3,12 @@ export class MessageResponseDto {
   chatId: string;
   senderId: string;
   senderRole: string;
-  content: string;
+  content: string | null;
+  mediaUrl: string | null;
+  mediaPublicId: string | null;
+  mediaType: string | null;
+  mediaName: string | null;
+  mediaSize: number | null;
   createdAt: string;
   isRead: boolean;
 
@@ -12,7 +17,12 @@ export class MessageResponseDto {
     this.chatId = data.chatId;
     this.senderId = data.senderId;
     this.senderRole = data.senderRole;
-    this.content = data.content;
+    this.content = data.content ?? null;
+    this.mediaUrl = data.mediaUrl ?? null;
+    this.mediaPublicId = data.mediaPublicId ?? null;
+    this.mediaType = data.mediaType ?? null;
+    this.mediaName = data.mediaName ?? null;
+    this.mediaSize = data.mediaSize ?? null;
     this.createdAt = data.createdAt.toISOString();
     this.isRead = data.isRead;
   }
@@ -37,6 +47,8 @@ export class ChatResponseDto {
     createdAt: string;
     senderRole?: string;
     isRead?: boolean;
+    mediaUrl?: string | null;
+    mediaType?: string | null;
   } | null;
 
   constructor(data: any) {
@@ -53,6 +65,8 @@ export class ChatResponseDto {
           createdAt: data.messages[0].createdAt,
           senderRole: data.messages[0].senderRole,
           isRead: data.messages[0].isRead,
+          mediaUrl: data.messages[0].mediaUrl,
+          mediaType: data.messages[0].mediaType,
         }
       : null;
   }

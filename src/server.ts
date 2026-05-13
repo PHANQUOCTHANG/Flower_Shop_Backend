@@ -12,6 +12,7 @@ import "@/config/cloudinary";
 import http from "http";
 import { initSocket } from "@/config/socket";
 import { startOrderWorker } from "@/module/order/order.worker";
+import { setupSwagger } from "@/config/swagger";
 
 const PORT = process.env.PORT || 5000;
 
@@ -19,7 +20,14 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Swagger
+setupSwagger(app);
+
 // Routes
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 clientRoute(app);
 
 // Global Error Handler
