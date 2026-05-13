@@ -36,7 +36,7 @@ export class ReviewRepository implements IReviewRepository {
     const limit = Math.min(Number(query.limit) || 10, 50);
     const where = { productId, isVisible: true, deletedAt: null };
 
-    const [data, total] = await Promise.all([
+    const [data, total, aggregate, starGroups] = await Promise.all([
       this.prisma.review.findMany({
         where,
         include: {
@@ -48,9 +48,28 @@ export class ReviewRepository implements IReviewRepository {
         orderBy: { createdAt: "desc" },
       }),
       this.prisma.review.count({ where }),
+      this.prisma.review.aggregate({
+        where,
+        _avg: { rating: true },
+      }),
+      this.prisma.review.groupBy({
+        by: ["rating"],
+        where,
+        _count: { rating: true },
+      }),
     ]);
 
-    return { data, total, page, limit };
+    const starCounts = [5, 4, 3, 2, 1].map((star) => ({
+      star,
+      count: starGroups.find((g) => g.rating === star)?._count.rating ?? 0,
+    }));
+
+    const stats = {
+      avgRating: aggregate._avg.rating ?? 0,
+      starCounts,
+    };
+
+    return { data, total, page, limit, stats };
   }
 
   // Lấy danh sách Review theo slug của sản phẩm (resolve slug → productId qua join)
@@ -63,7 +82,7 @@ export class ReviewRepository implements IReviewRepository {
       deletedAt: null,
     };
 
-    const [data, total] = await Promise.all([
+    const [data, total, aggregate, starGroups] = await Promise.all([
       this.prisma.review.findMany({
         where,
         include: {
@@ -75,9 +94,28 @@ export class ReviewRepository implements IReviewRepository {
         orderBy: { createdAt: "desc" },
       }),
       this.prisma.review.count({ where }),
+      this.prisma.review.aggregate({
+        where,
+        _avg: { rating: true },
+      }),
+      this.prisma.review.groupBy({
+        by: ["rating"],
+        where,
+        _count: { rating: true },
+      }),
     ]);
 
-    return { data, total, page, limit };
+    const starCounts = [5, 4, 3, 2, 1].map((star) => ({
+      star,
+      count: starGroups.find((g) => g.rating === star)?._count.rating ?? 0,
+    }));
+
+    const stats = {
+      avgRating: aggregate._avg.rating ?? 0,
+      starCounts,
+    };
+
+    return { data, total, page, limit, stats };
   }
 
   // Kiểm tra user đã mua sản phẩm này chưa (chỉ cho phép đánh giá khi đã nhận hàng)

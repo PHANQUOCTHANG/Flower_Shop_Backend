@@ -10,6 +10,7 @@ import {
 } from "@/module/auth/auth.request";
 import { sendOtpSchema, verifyOtpSchema } from "@/module/auth/otp/otp.request";
 import { requireAuth } from "@/middleware/auth.middleware";
+import { authRateLimiter, otpRateLimiter } from "@/middleware/rateLimiter.middleware";
 
 const router = Router();
 
@@ -17,12 +18,13 @@ const router = Router();
 // POST | /api/auth/register | Đăng ký tài khoản mới
 router.post(
   "/register",
+  authRateLimiter,
   validationMiddleware(registerSchema),
   authCtrl.register,
 );
 
 // POST | /api/auth/login | Đăng nhập
-router.post("/login", validationMiddleware(loginSchema), authCtrl.login);
+router.post("/login", authRateLimiter, validationMiddleware(loginSchema), authCtrl.login);
 
 // POST | /api/auth/refresh-token | Làm mới access token
 router.post("/refresh-token", authCtrl.refresh);
@@ -33,6 +35,7 @@ router.post("/logout", authCtrl.logout);
 // POST | /api/auth/send-otp | Gửi OTP
 router.post(
   "/forgot-password/send-otp",
+  otpRateLimiter,
   validationMiddleware(sendOtpSchema),
   authCtrl.sendOtp,
 );
@@ -40,6 +43,7 @@ router.post(
 // POST | /api/auth/verify-otp | Xác thực OTP
 router.post(
   "/forgot-password/verify-otp",
+  otpRateLimiter,
   validationMiddleware(verifyOtpSchema),
   authCtrl.verifyOtp,
 );

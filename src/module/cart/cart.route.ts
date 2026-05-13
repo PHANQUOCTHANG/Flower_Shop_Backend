@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as cartController from "./cart.controller";
 import validationMiddleware from "@/middleware/validate.middleware";
 import { addToCartSchema, updateQuantitySchema } from "./cart.request";
+import { apiActionRateLimiter } from "@/middleware/rateLimiter.middleware";
 
 const router = Router();
 
@@ -11,6 +12,7 @@ router.get("/", cartController.getMyCart);
 // POST thêm sản phẩm vào giỏ
 router.post(
   "/add",
+  apiActionRateLimiter,
   validationMiddleware(addToCartSchema),
   cartController.addToCart,
 );
@@ -18,6 +20,7 @@ router.post(
 // PATCH cập nhật số lượng sản phẩm
 router.patch(
   "/update",
+  apiActionRateLimiter,
   validationMiddleware(updateQuantitySchema),
   cartController.updateCartQuantity,
 );

@@ -16,6 +16,7 @@ The system provides a complete backend solution including authentication, produc
 | PostgreSQL | Relational database |
 | Prisma ORM | Modern ORM for database access |
 | Redis | Caching and session storage |
+| BullMQ | Distributed task queue for background jobs |
 | JWT | Authentication and authorization |
 | Bcrypt | Password hashing |
 | Zod | Request validation |
@@ -24,6 +25,7 @@ The system provides a complete backend solution including authentication, produc
 | Socket.io | Real-time communication |
 | Swagger / OpenAPI | API documentation |
 | Winston | Logging system |
+| Helmet & Rate Limit | API security and brute-force protection |
 
 ---
 
@@ -32,13 +34,15 @@ The system provides a complete backend solution including authentication, produc
 | Feature | Description |
 |---|---|
 | Authentication | User registration, login, OTP email verification, and refresh tokens |
-| User Management | Profile management and role-based access control |
-| Product Management | Create, update, delete products with categories and images |
-| Shopping Cart | Add, remove, and update cart items |
-| Order Management | Create orders and track order status |
-| Reviews | Product rating and review system |
-| Real-time Chat | Customer and admin chat using Socket.io |
-| Admin Dashboard | Manage products, orders, and users |
+| User Management | Profile management and role-based access control (RBAC) |
+| System Settings | Admin-configurable shop info, banners, and payment settings (Bank/QR) |
+| Product Management | Create, update, delete products with categories and multi-image uploads |
+| Shopping Cart | Add, remove, and update cart items with persistence |
+| Order Management | Create orders, track status, and manage processing queue via BullMQ |
+| Verified Reviews | Product rating system with media (images/videos) for confirmed buyers |
+| Activity Logging | Systematic tracking of admin actions and sensitive system events |
+| Real-time Chat | Customer-admin chat with rich media support and Zalo-style file cards |
+| API Security | Implemented rate limiting, secure headers, and robust CORS policies |
 
 ---
 
@@ -47,11 +51,11 @@ The system provides a complete backend solution including authentication, produc
 The system supports multiple authentication mechanisms:
 
 - Email & Password login
-- Email OTP verification
+- Email OTP verification for registration and recovery
 - Social login (Google, Facebook)
-- JWT access tokens
-- Refresh token rotation
-- Role-based access control
+- JWT access tokens with short TTL
+- Refresh token rotation and invalidation
+- Role-based access control (RBAC)
 
 ### User Roles
 
@@ -69,20 +73,22 @@ STAFF
 src/
 
 ├── api/v1/routes/        → API route definitions
-├── config/               → Application configuration & Swagger
+├── config/               → Application configuration, Swagger & Redis
 ├── module/               → Business modules
 │   ├── auth/             → Authentication & OTP
-│   ├── user/             → User management
+│   ├── user/             → User management & RBAC
 │   ├── product/          → Product management
 │   ├── category/         → Product categories
-│   ├── cart/             → Shopping cart
-│   ├── order/            → Order processing
-│   └── review/           → Product reviews
+│   ├── cart/             → Shopping cart logic
+│   ├── order/            → Order processing & BullMQ workers
+│   ├── review/           → Verified reviews with media
+│   ├── setting/          → Dynamic system configuration
+│   └── activity-log/     → Audit trails for admin actions
 │
-├── middleware/           → Auth, validation, error handling
-├── lib/                  → Prisma, Redis, Cloudinary
-├── utils/                → Helper functions
-└── socket/               → Socket.io handlers
+├── middleware/           → Auth, validation, error handling, Rate Limit
+├── lib/                  → Prisma, Redis, Cloudinary configuration
+├── utils/                → Helper functions, AppError, and caching
+└── socket/               → Socket.io handlers for real-time chat
 ```
 
 ---
@@ -93,7 +99,7 @@ src/
 
 | Model | Description |
 |---|---|
-| User | System users |
+| User | System users with role definitions |
 | RefreshToken | Token rotation system |
 | Otp | Email OTP verification |
 | Category | Product categories |
@@ -103,9 +109,13 @@ src/
 | Cart | User shopping cart |
 | CartItem | Cart items |
 | Order | Customer orders |
-| OrderItem | Order item details |
+| OrderItem | Order item details with review status |
+| Review | Verified product reviews |
+| ReviewMedia | Images and videos attached to reviews |
+| SystemSetting | Key-value store for app configuration |
+| ActivityLog | Log of system and admin activities |
 | Chat | Chat rooms |
-| Message | Chat messages |
+| Message | Chat messages with media metadata |
 
 ---
 

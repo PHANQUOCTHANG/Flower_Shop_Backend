@@ -5,6 +5,7 @@ import { z } from "zod";
 import validationMiddleware from "@/middleware/validate.middleware";
 import { requireAuth } from "@/middleware/auth.middleware";
 import { uploadReviewMedia } from "@/middleware/upload.middleware";
+import { apiActionRateLimiter } from "@/middleware/rateLimiter.middleware";
 
 const router = Router();
 
@@ -37,6 +38,7 @@ router.get(
 router.post(
   "/",
   requireAuth,
+  apiActionRateLimiter,
   uploadReviewMedia,                              // upload file lên Cloudinary
   validationMiddleware(CreateReviewSchema, "body"), // validate text fields sau upload
   reviewController.createReview,
