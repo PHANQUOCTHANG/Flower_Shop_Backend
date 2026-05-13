@@ -24,6 +24,10 @@ app.use(cookieParser());
 setupSwagger(app);
 
 // Routes
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 clientRoute(app);
 
 // Global Error Handler
