@@ -10,7 +10,7 @@ const categoryBase = z.object({
     .nullable()
     .optional(),
   thumbnailUrl: z.string().url("Link ảnh không hợp lệ").nullable().optional(),
-  sortOrder: z.number().int().default(0),
+  sortOrder: z.coerce.number().int().default(0),
   status: z.enum(["active", "hidden"]).default("active"),
   metaTitle: z.string().max(255).nullable().optional(),
   metaDescription: z.string().nullable().optional(),
@@ -18,7 +18,9 @@ const categoryBase = z.object({
 
 export const CreateCategorySchema = categoryBase;
 
-export const UpdateCategorySchema = categoryBase.partial();
+export const UpdateCategorySchema = categoryBase.partial().extend({
+  thumbnailEmpty: z.coerce.boolean().optional(),
+});
 
 export const CategoryIdParamSchema = z.object({
   id: z.string().uuid("ID danh mục phải là UUID hợp lệ"),

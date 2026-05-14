@@ -34,14 +34,18 @@ export const getCategories = asyncHandler(
 // [PATCH] /api/v1/categories/:id - Cập nhật danh mục
 export const updateCategory = asyncHandler(
   async (req: Request, res: Response): Promise<Response> => {
+    const { thumbnailEmpty = false, ...updateBody } = req.body;
+
     // Ghi đè URL ảnh nếu có upload mới
     if (req.file) {
-      req.body.thumbnailUrl = req.file.path;
+      updateBody.thumbnailUrl = req.file.path;
+    } else if (thumbnailEmpty) {
+      updateBody.thumbnailUrl = null;
     }
 
     const data = await categoryService.update(
       req.params.id as string,
-      req.body,
+      updateBody,
     );
 
     return res
