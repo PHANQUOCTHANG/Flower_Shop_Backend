@@ -79,7 +79,6 @@ export const getAllCustomers = asyncHandler(
   async (req: Request, res: Response) => {
     const query = normalizeQuery(req.query);
     const result = await orderService.findAllCustomers(query);
-    console.log("Customer list:", result);
     return res.status(200).json(ApiResponse.paginate(result));
   },
 );

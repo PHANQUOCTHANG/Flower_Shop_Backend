@@ -5,9 +5,8 @@ const isSecure = redisUrl.startsWith("rediss://");
 
 const redisClient = createClient({
   url: redisUrl,
-  socket: isSecure
-    ? { tls: true, rejectUnauthorized: false }
-    : undefined,
+  // Bỏ rejectUnauthorized: false → TLS đúng chuẩn, an toàn hơn trong production
+  socket: isSecure ? { tls: true } : undefined,
 });
 
 redisClient.on("error", (err) => {

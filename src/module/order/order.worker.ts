@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import { createRedisConnection } from "@/config/queue";
+import { getBullMQRedis, orderDLQ } from "@/config/queue";
 import { getIO } from "@/config/socket";
 import { orderService } from "@/config/container";
 import { CheckoutDto } from "@/module/order/order.request";
@@ -18,6 +18,9 @@ export const startOrderWorker = () => {
       const { userId, dto } = job.data;
       const io = getIO();
 
+      // Log payload (không log thông tin nhạy cảm như password/token)
+      logger.info(`[Worker] Processing job ${job.id} for user ${userId} | paymentMethod: ${dto.paymentMethod}`);
+
       io.to(`user:${userId}`).emit("order:status", {
         jobId: job.id,
         status: "processing",
@@ -26,6 +29,8 @@ export const startOrderWorker = () => {
 
       try {
         const order = await orderService.checkout(userId, dto);
+
+        logger.info(`[Worker] Job ${job.id} completed → orderId: ${order.id}`);
 
         io.to(`user:${userId}`).emit("order:status", {
           jobId: job.id,
@@ -36,7 +41,9 @@ export const startOrderWorker = () => {
 
         return order;
       } catch (error: any) {
-        logger.error(`[Worker] Job failed: ${job.id} — ${error.message}`);
+        logger.error(
+          `[Worker] Job ${job.id} failed (attempt ${job.attemptsMade}/${job.opts.attempts}) — ${error.message}`
+        );
 
         io.to(`user:${userId}`).emit("order:status", {
           jobId: job.id,
@@ -44,25 +51,38 @@ export const startOrderWorker = () => {
           message: error.message || "Đặt hàng thất bại",
         });
 
+        // Nếu đã hết số lần retry → chuyển sang Dead-Letter Queue
+        const maxAttempts = job.opts.attempts ?? 3;
+        if (job.attemptsMade >= maxAttempts) {
+          await orderDLQ.add("failed-checkout", job.data, {
+            jobId: `dlq:${job.id}`,
+          });
+          logger.warn(`[Worker] Job ${job.id} moved to DLQ after ${job.attemptsMade} attempts`);
+        }
+
         throw error;
       }
     },
     {
-      connection: createRedisConnection(), // gọi factory
-      concurrency: 5,
-      limiter: {
-        max: 20,
-        duration: 1000,
-      },
-    },
+      connection: getBullMQRedis(), // Dùng singleton — không tạo connection mới
+      concurrency: 3,               // Giảm 5 → 3: ít job đồng thời hơn, tiết kiệm lệnh Redis
+      // Bỏ limiter không cần thiết cho dự án nhỏ-trung (tiết kiệm ZADD/ZCOUNT/ZREMRANGEBYRANK)
+    }
   );
 
   worker.on("completed", (job) => {
-    logger.info(`[Worker] Job ${job?.id} completed successfully`);
+    logger.info(`[Worker] ✅ Job ${job?.id} completed`);
   });
 
   worker.on("failed", (job, err) => {
-    logger.error(`[Worker] Job ${job?.id} failed after ${job?.attemptsMade} attempts: ${err.message}`);
+    logger.error(
+      `[Worker] ❌ Job ${job?.id} failed after ${job?.attemptsMade} attempts: ${err.message}`
+    );
+  });
+
+  worker.on("error", (err) => {
+    // Bắt lỗi worker-level (VD: mất kết nối Redis) để không crash process
+    logger.error(`[Worker] Worker-level error: ${err.message}`);
   });
 
   return worker;

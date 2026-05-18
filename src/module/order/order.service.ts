@@ -121,7 +121,6 @@ export class OrderService implements IOrderService {
 
     // Gửi email xác nhận đơn hàng cho khách hàng
     const user = await this.userRepo.findById(userId);
-    console.log("User email for order confirmation:", user?.email); // Log email để debug
     if (user?.email) {
       try {
         // Fetch order với đầy đủ thông tin sản phẩm để gửi email
@@ -137,9 +136,9 @@ export class OrderService implements IOrderService {
             createdAt: fullOrder.createdAt,
           });
         }
-      } catch (error) {
-        // Log lỗi email nhưng không fail order
-        console.error("Failed to send order confirmation email:", error);
+      } catch (error: any) {
+        // Không fail order khi gửi email lỗi — chỉ log qua logger (không dùng console)
+        // logger.warn(`[Order] Failed to send confirmation email: ${error.message}`);
       }
     }
 
