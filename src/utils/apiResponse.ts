@@ -22,12 +22,12 @@ export class ApiResponse<T> {
     return new ApiResponse(data, undefined, message);
   }
 
-  static paginate<T>(result: any) {
+  static paginate(result: any) {
     const { data, ...meta } = result;
     return new ApiResponse(data, { ...meta, results: data.length});
   }
 
-  static error(message: string, statusCode: number = 500) {
+  static error(message: string) {
     const response = new ApiResponse();
     response.status = "error";
     response.message = message;

@@ -15,7 +15,6 @@ import {
   getCache,
   setCache,
   deleteCache,
-  deleteCacheByPattern,
 } from "@/utils/cache";
 
 // Kết quả nội bộ — thêm refreshTokenExpiresAt để controller set cookie chính xác
@@ -39,7 +38,7 @@ export interface IAuthService {
 export class AuthService implements IAuthService {
   private readonly CACHE_KEY_REFRESH = "auth:refresh:";
   private readonly CACHE_KEY_BLACKLIST = "auth:blacklist:";
-  private readonly CACHE_TTL_OTP = 300; // 5 phút - OTP verification
+
 
   constructor(
     private readonly userRepo: IUserRepository,
@@ -106,8 +105,6 @@ export class AuthService implements IAuthService {
 
     // 2. Lấy giá trị remember từ payload (Giả sử lúc Login Thắng lưu là { remember: boolean })
     const isRememberMe = !!decoded.rememberMe;
-
-    console.log("Decoded Refresh Token Payload:", decoded);
 
     const cacheKey = `${this.CACHE_KEY_REFRESH}${refreshToken}`;
     let userId = await getCache<string>(cacheKey);

@@ -1,7 +1,7 @@
 import { ICartRepository } from "@/module/cart/cart.repository";
 import { IProductRepository } from "@/module/product/product.repository";
 import AppError from "@/utils/appError";
-import { Cart, CartItem } from "@prisma/client";
+
 import { getCache, setCache, deleteCache } from "@/utils/cache";
 
 export interface ICartService {

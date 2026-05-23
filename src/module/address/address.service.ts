@@ -1,7 +1,6 @@
 import type { IAddressRepository } from "./address.repository";
 import { toAddressResponse } from "./address.response";
 import {
-  normalizeQuery,
   type BaseQuery,
   type IPaginatedResult,
 } from "@/utils/query";

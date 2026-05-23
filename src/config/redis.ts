@@ -9,8 +9,19 @@ const redisClient = createClient({
   socket: isSecure ? { tls: true } : undefined,
 });
 
+let lastLoggedErrorTime = 0;
+
 redisClient.on("error", (err) => {
-  console.error("Redis error:", err);
+  if (err?.message?.includes("max requests limit exceeded")) {
+    const now = Date.now();
+    // Phạt Upstash limit, chỉ log 1 lần mỗi 5 phút (300000ms) để chống spam văng console
+    if (now - lastLoggedErrorTime > 300000) {
+      console.error("[Redis Limit] Upstash hết quota 500k/ngày, đang bỏ qua kết nối...");
+      lastLoggedErrorTime = now;
+    }
+  } else {
+    console.error("Redis error:", err);
+  }
 });
 
 export const connectRedis = async () => {

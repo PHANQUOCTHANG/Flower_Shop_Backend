@@ -18,6 +18,10 @@ export const getBullMQRedis = (): IORedis => {
     enableReadyCheck: false,   // BullMQ tự xử lý
     // Bỏ rejectUnauthorized: false → dùng TLS đúng chuẩn
     tls: isSecure ? {} : undefined,
+    retryStrategy: (times) => {
+      // Tăng dần thời gian kết nối lại, tối đa 15 giây để tránh bị Upstash spam log
+      return Math.min(times * 1000, 15000);
+    },
   });
 
   _redisInstance.on("error", (err) => {

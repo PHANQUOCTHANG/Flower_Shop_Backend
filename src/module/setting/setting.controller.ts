@@ -3,7 +3,7 @@ import settingService from "./setting.service";
 import { ApiResponse } from "@/utils/apiResponse";
 
 class SettingController {
-  getAllSettings = async (req: Request, res: Response, next: NextFunction) => {
+  getAllSettings = async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const settings = await settingService.getAllSettings();
       return res.status(200).json(ApiResponse.success(settings, "Lấy cấu hình thành công"));

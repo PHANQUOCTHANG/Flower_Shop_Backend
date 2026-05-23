@@ -3,7 +3,7 @@ import { IReviewRepository } from "./review.repository";
 import { IOrderService } from "../order/order.service";
 import { CreateReviewDto } from "./review.request";
 import { ReviewResponseDto } from "./review.response";
-import { deleteCacheByPattern, deleteCache } from "@/utils/cache";
+import { deleteCacheByPattern } from "@/utils/cache";
 
 // Extend DTO với media — do controller inject sau khi multer upload xong
 interface ReviewMediaItem {

@@ -19,29 +19,46 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError("Giỏ hàng của bạn đang trống", 400);
   }
 
-  // Đưa job vào queue, KHÔNG chờ kết quả
-  const job = await orderQueue.add(
-    "process-checkout",
-    {
-      userId,
-      dto: req.body,
-      cartId: cart.id,
-    },
-    {
-      // Deduplicate: cùng user không được có 2 job pending cùng lúc
-      jobId: `checkout:${userId}:${Date.now()}`,
-    },
-  );
+  let job;
+  try {
+    // Đưa job vào queue, KHÔNG chờ kết quả
+    job = await orderQueue.add(
+      "process-checkout",
+      {
+        userId,
+        dto: req.body,
+        cartId: cart.id,
+      },
+      {
+        // Deduplicate: cùng user không được có 2 job pending cùng lúc
+        jobId: `checkout:${userId}:${Date.now()}`,
+      },
+    );
 
-  // Trả về ngay 202 — client dùng jobId để track qua WebSocket
-  return res.status(202).json({
-    success: true,
-    message: "Đơn hàng đang được xử lý",
-    data: {
-      jobId: job.id,
-      status: "queued",
-    },
-  });
+    // Trả về ngay 202 — client dùng jobId để track qua WebSocket
+    return res.status(202).json({
+      success: true,
+      message: "Đơn hàng đang được xử lý",
+      data: {
+        jobId: job.id,
+        status: "queued",
+      },
+    });
+  } catch (queueError) {
+    console.error("[BullMQ Fallback] Redis quá tải hoặc sập, chuyển sang xử lý đặt hàng đồng bộ thẳng xuống DB:", queueError);
+
+    // Fallback: Xử lý đơn hàng trực tiếp ngay lập tức
+    const order = await orderService.checkout(userId, req.body);
+    
+    return res.status(201).json({
+      success: true,
+      message: "Đặt hàng thành công",
+      data: {
+        orderId: order.id,
+        status: "completed",
+      },
+    });
+  }
 });
 
 // [GET] /api/v1/orders/me - Lịch sử đơn hàng

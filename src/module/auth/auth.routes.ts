@@ -4,7 +4,6 @@ import validationMiddleware from "@/middleware/validate.middleware";
 import {
   registerSchema,
   loginSchema,
-  refreshTokenSchema,
   resetPasswordSchema,
   changePasswordSchema,
 } from "@/module/auth/auth.request";

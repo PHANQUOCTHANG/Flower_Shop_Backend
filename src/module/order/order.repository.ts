@@ -2,7 +2,7 @@ import { PrismaClient, Order, Prisma } from "@prisma/client";
 import { IPaginatedResult } from "@/utils/query";
 import { OrderQuery } from "./order.type";
 import { getSearchPattern } from "@/utils/searchUtils";
-import { OrderResponseDto } from "@/module/order/order.response";
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -747,18 +747,8 @@ export class OrderRepository implements IOrderRepository {
     });
 
     // ── Tính khách hàng mới (user đặt hàng lần đầu trong tháng đó) ──
-    const curUserIds = new Set(
-      curRevenueAgg ? curNewCustomers.map((u) => u.userId) : [],
-    );
-    const prevUserIds = new Set(prevNewCustomers.map((u) => u.userId));
-
-    // Khách hàng mới = user có lần đặt đầu trong tháng hiện tại và chưa từng đặt trước đó
-    const usersInCurMonth = curNewCustomers.map((u) => u.userId);
-    const newCurCustomers = usersInCurMonth.length;
+    const newCurCustomers = curNewCustomers.length;
     const newPrevCustomers = prevNewCustomers.length;
-
-    void curUserIds;
-    void prevUserIds;
 
     return {
       currentMonth: {

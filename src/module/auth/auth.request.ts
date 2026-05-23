@@ -3,8 +3,6 @@ import { z } from "zod";
 // [UserRole] Enum từ Prisma: CUSTOMER | ADMIN | STAFF
 const UserRoleEnum = z.enum(["CUSTOMER", "ADMIN", "STAFF"]);
 
-// [AuthProvider] Enum từ Prisma: LOCAL | GOOGLE | FACEBOOK
-const AuthProviderEnum = z.enum(["LOCAL", "GOOGLE", "FACEBOOK"]);
 
 // Request Đăng ký tài khoản
 export const registerSchema = z.object({

@@ -80,9 +80,29 @@ export const startOrderWorker = () => {
     );
   });
 
+  let isPausingDueToLimit = false;
+
   worker.on("error", (err) => {
-    // Bắt lỗi worker-level (VD: mất kết nối Redis) để không crash process
-    logger.error(`[Worker] Worker-level error: ${err.message}`);
+    // Nếu gặp lỗi rate limit của Upstash
+    if (err.message.includes("max requests limit exceeded")) {
+      if (!isPausingDueToLimit) {
+        isPausingDueToLimit = true;
+        logger.error(`[Worker] Upstash Redis hết quota! Tạm dừng worker 10 phút để tránh spam log...`);
+        
+        // Tạm dừng pool job của worker
+        try { worker.pause(); } catch(e) {}
+        
+        // Cài giờ chạy lại sau 10 phút
+        setTimeout(() => {
+          isPausingDueToLimit = false;
+          logger.info(`[Worker] Khởi động lại worker kiểm tra Redis...`);
+          try { worker.resume(); } catch(e) {}
+        }, 10 * 60 * 1000); // 10 phút
+      }
+    } else {
+      // Bắt lỗi worker-level bình thường
+      logger.error(`[Worker] Worker-level error: ${err.message}`);
+    }
   });
 
   return worker;
