@@ -10,6 +10,11 @@ import type {
 } from "./address.request";
 import type { AddressResponse } from "./address.response";
 import AppError from "@/utils/appError";
+import {
+  getCache,
+  setCache,
+  deleteCacheByPattern,
+} from "@/utils/cache";
 
 export interface IAddressService {
   getAddresses(
@@ -31,6 +36,9 @@ export interface IAddressService {
 }
 
 export class AddressService implements IAddressService {
+  private readonly CACHE_KEY = "addresses";
+  private readonly CACHE_TTL_LIST = 600;  // 10 phút — địa chỉ ít thay đổi
+
   constructor(private readonly repository: IAddressRepository) {}
 
   // Lấy tất cả địa chỉ của người dùng với phân trang
@@ -38,6 +46,10 @@ export class AddressService implements IAddressService {
     userId: string,
     query: BaseQuery,
   ): Promise<IPaginatedResult<AddressResponse>> {
+    const cacheKey = `${this.CACHE_KEY}:user:${userId}:${JSON.stringify(query)}`;
+    const cached = await getCache<IPaginatedResult<AddressResponse>>(cacheKey);
+    if (cached) return cached;
+
     const page = query.page || 1;
     const limit = query.limit || 10;
     const skip = (page - 1) * limit;
@@ -47,13 +59,16 @@ export class AddressService implements IAddressService {
       this.repository.countByUserId(userId),
     ]);
 
-    return {
+    const response: IPaginatedResult<AddressResponse> = {
       data: addresses.map(toAddressResponse),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     };
+
+    await setCache(cacheKey, response, this.CACHE_TTL_LIST);
+    return response;
   }
 
   // Lấy chi tiết một địa chỉ (với permission check)
@@ -85,6 +100,10 @@ export class AddressService implements IAddressService {
 
     // Tạo địa chỉ mới (repository tự động xử lý logic default)
     const address = await this.repository.create(userId, data);
+
+    // Xóa cache danh sách — địa chỉ mới được thêm
+    await deleteCacheByPattern(`${this.CACHE_KEY}:user:${userId}:*`);
+
     return toAddressResponse(address);
   }
 
@@ -112,6 +131,12 @@ export class AddressService implements IAddressService {
     }
 
     const address = await this.repository.update(id, userId, data);
+
+    // Xóa cache liên quan
+    await Promise.all([
+      deleteCacheByPattern(`${this.CACHE_KEY}:user:${userId}:*`), // Cache danh sách
+    ]);
+
     return toAddressResponse(address);
   }
 
@@ -130,6 +155,11 @@ export class AddressService implements IAddressService {
     }
 
     await this.repository.delete(id);
+
+    // Xóa cache liên quan
+    await Promise.all([
+      deleteCacheByPattern(`${this.CACHE_KEY}:user:${userId}:*`), // Cache danh sách
+    ]);
   }
 
   // Đặt một địa chỉ làm mặc định (repository tự động bỏ default của các cái khác)
@@ -150,6 +180,11 @@ export class AddressService implements IAddressService {
     }
 
     const updatedAddress = await this.repository.setDefault(id, userId);
+
+    // Xóa toàn bộ cache của user — setDefault ảnh hưởng nhiều địa chỉ
+    await deleteCacheByPattern(`${this.CACHE_KEY}:user:${userId}:*`);
+
     return toAddressResponse(updatedAddress);
   }
 }
+

@@ -5,8 +5,17 @@ const isSecure = redisUrl.startsWith("rediss://");
 
 const redisClient = createClient({
   url: redisUrl,
-  // Bỏ rejectUnauthorized: false → TLS đúng chuẩn, an toàn hơn trong production
-  socket: isSecure ? { tls: true } : undefined,
+  socket: {
+    tls: isSecure ? true : undefined,
+    reconnectStrategy: (retries: number, cause: Error) => {
+      // Nếu gặp lỗi quá giới hạn Upstash, ngừng cố gắng kết nối lại để không bị bão spam lỗi
+      if (cause?.message?.includes("max requests limit exceeded")) {
+        return new Error("Upstash max requests limit exceeded. Stopping reconnect.");
+      }
+      // Trì hoãn reconnect theo số lần thử (tối đa 3 giây)
+      return Math.min(retries * 50, 3000);
+    },
+  },
 });
 
 let lastLoggedErrorTime = 0;

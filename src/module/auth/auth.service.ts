@@ -179,6 +179,8 @@ export class AuthService implements IAuthService {
       this.refreshRepo.revokeAllByUser(userUpdate.id),
       this.otpRepo.deleteByEmail(dto.email),
       deleteCache(`otp:${dto.email}`),
+      // Xóa cache user detail — mật khẩu vừa được thay đổi
+      deleteCache(`users:id:${userUpdate.id}`),
     ]);
 
     const result = await this.generateAuthResult(userUpdate, false);
@@ -217,6 +219,8 @@ export class AuthService implements IAuthService {
     await Promise.all([
       this.refreshRepo.revokeAllByUser(userId),
       ...deleteCachePromises,
+      // Xóa cache user detail — mật khẩu vừa được đổi
+      deleteCache(`users:id:${userId}`),
     ]);
   }
 

@@ -128,11 +128,21 @@ export class CategoryService implements ICategoryService {
     const updated = await this.categoryRepo.updateById(id, updateData);
 
     // Xóa cache liên quan và AI cache
-    await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
-      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`), // Cache danh sách (thông tin thay đổi)
+    const invalidations: Promise<any>[] = [
+      deleteCache(`${this.CACHE_KEY}:id:${id}`),         // Cache chi tiết ID
+      deleteCacheByPattern(`${this.CACHE_KEY}:all:*`),   // Cache danh sách (thông tin thay đổi)
       AIService.invalidateKnowledgeCache(),
-    ]);
+    ];
+
+    // Phòng ngừa stale slug cache — xóa slug cũ và slug mới nếu tên thay đổi
+    if (exists.slug) {
+      invalidations.push(deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`));
+    }
+    if (dto.name && updateData.slug) {
+      invalidations.push(deleteCache(`${this.CACHE_KEY}:slug:${updateData.slug}`));
+    }
+
+    await Promise.all(invalidations);
 
     return CategoryResponseDto.from(updated!);
   }

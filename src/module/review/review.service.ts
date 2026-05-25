@@ -3,7 +3,11 @@ import { IReviewRepository } from "./review.repository";
 import { IOrderService } from "../order/order.service";
 import { CreateReviewDto } from "./review.request";
 import { ReviewResponseDto } from "./review.response";
-import { deleteCacheByPattern } from "@/utils/cache";
+import {
+  getCache,
+  setCache,
+  deleteCacheByPattern,
+} from "@/utils/cache";
 
 // Extend DTO với media — do controller inject sau khi multer upload xong
 interface ReviewMediaItem {
@@ -37,6 +41,9 @@ export interface IReviewService {
 }
 
 export class ReviewService implements IReviewService {
+  private readonly CACHE_KEY = "reviews";
+  private readonly CACHE_TTL = 180; // 3 phút — review có thể cập nhật rating
+
   constructor(
     private readonly reviewRepo: IReviewRepository,
     private readonly orderService: IOrderService,
@@ -72,22 +79,39 @@ export class ReviewService implements IReviewService {
       );
     }
 
-    // Invalidate Cache (xóa cache sản phẩm để cập nhật rating mới)
-    await deleteCacheByPattern(`products:*`);
+    // Invalidate Cache — xóa cache sản phẩm (rating thay đổi) và cache review của sản phẩm này
+    await Promise.all([
+      deleteCacheByPattern(`products:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:product:${input.productId}:*`),
+    ]);
 
     return ReviewResponseDto.from(review);
   }
 
   // [GET] Lấy danh sách đánh giá theo productId
   async getProductReviews(productId: string, query: Record<string, unknown>) {
+    const cacheKey = `${this.CACHE_KEY}:product:${productId}:${JSON.stringify(query)}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return cached;
+
     const result = await this.reviewRepo.findByProductId(productId, query);
-    return { ...result, data: ReviewResponseDto.fromList(result.data) };
+    const response = { ...result, data: ReviewResponseDto.fromList(result.data) };
+
+    await setCache(cacheKey, response, this.CACHE_TTL);
+    return response;
   }
 
   // [GET] Lấy danh sách đánh giá theo slug sản phẩm (dùng cho trang chi tiết)
   async getProductReviewsBySlug(slug: string, query: Record<string, unknown>) {
+    const cacheKey = `${this.CACHE_KEY}:slug:${slug}:${JSON.stringify(query)}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return cached;
+
     const result = await this.reviewRepo.findByProductSlug(slug, query);
-    return { ...result, data: ReviewResponseDto.fromList(result.data) };
+    const response = { ...result, data: ReviewResponseDto.fromList(result.data) };
+
+    await setCache(cacheKey, response, this.CACHE_TTL);
+    return response;
   }
 
   // [DELETE] Xóa đánh giá (Người dùng tự xóa hoặc Admin xóa)
@@ -108,6 +132,12 @@ export class ReviewService implements IReviewService {
     }
 
     await this.reviewRepo.softDelete(reviewId);
-    await deleteCacheByPattern(`products:*`);
+
+    // Xóa cache sản phẩm (rating thay đổi) và cache review liên quan
+    await Promise.all([
+      deleteCacheByPattern(`products:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:product:${review.productId}:*`),
+    ]);
   }
 }
+

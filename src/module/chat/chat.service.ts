@@ -135,6 +135,8 @@ export class ChatService implements IChatService {
     return response;
   }
 
+  // Không cache getChatHistory — đây là realtime chat, mỗi lần gửi tin cache sẽ bị xóa ngay,
+  // hit rate gần = 0% với active chat. Load history lần đầu query thẳng DB là đúng hướng.
   async getChatHistory(chatId: string, query: any) {
     const result = await this.chatRepo.getMessages(chatId, query);
     return {
@@ -150,6 +152,7 @@ export class ChatService implements IChatService {
 
   async markAsRead(chatId: string): Promise<void> {
     await this.chatRepo.markMessagesAsRead(chatId);
+    // Chỉ xóa admin list cache — không có history cache để xóa
     await deleteCacheByPattern(`${this.CACHE_KEY}:admin:*`);
   }
 
