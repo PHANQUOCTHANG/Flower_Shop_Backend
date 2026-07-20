@@ -11,6 +11,7 @@ import { requireAuth } from "@/middleware/auth.middleware";
 import reviewRoute from "@/module/review/review.route";
 import activityLogRoute from "@/module/activity-log/activity-log.route";
 import settingRoute from "@/module/setting/setting.route";
+import vnpayRoute from "@/module/vnpay/vnpay.route";
 
 
 const clientRoute = (app: Application) => {
@@ -26,6 +27,7 @@ const clientRoute = (app: Application) => {
   app.use(path + "/reviews", reviewRoute);
   app.use(path + "/activity-logs", requireAuth, activityLogRoute);
   app.use(path + "/settings", settingRoute);
+  app.use(path + "/vnpay", vnpayRoute); // Không cần auth — VNPay gọi trực tiếp
 };
 
 export default clientRoute;

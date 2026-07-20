@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { cartService, orderService } from "@/config/container";
+import { cartService, orderService, vnpayService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
 import { normalizeQuery } from "@/utils/query";
 import asyncHandler from "@/utils/asyncHandler";
@@ -19,6 +19,30 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError("Giỏ hàng của bạn đang trống", 400);
   }
 
+  const isVnpay = req.body.paymentMethod === "vnpay";
+
+  // Nếu là VNPay → xử lý đồng bộ ngay lập tức để lấy URL (KHÔNG đưa vào queue)
+  if (isVnpay) {
+    const order = await orderService.createPendingVnpayOrder(userId, req.body);
+    const vnpayUrl = vnpayService.createPaymentUrl({
+      orderId: order.id,
+      amount: order.totalPrice,
+      orderInfo: `Thanh toan don hang ${order.id}`,
+      ipAddress: req.ip || req.headers["x-forwarded-for"] as string || "127.0.0.1",
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Đơn hàng đang chờ thanh toán VNPay",
+      data: {
+        orderId: order.id,
+        status: "pending_payment",
+        vnpayUrl,
+      },
+    });
+  }
+
+  // Các phương thức khác (COD, Bank, Wallet) → Đưa vào background queue
   let job;
   try {
     // Đưa job vào queue, KHÔNG chờ kết quả
@@ -45,6 +69,9 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
       },
     });
   } catch (queueError) {
+    // Nếu là VNPay và đã xử lý ở trên thì không vào đây
+    if (isVnpay) throw queueError;
+
     console.error("[BullMQ Fallback] Redis quá tải hoặc sập, chuyển sang xử lý đặt hàng đồng bộ thẳng xuống DB:", queueError);
 
     // Fallback: Xử lý đơn hàng trực tiếp ngay lập tức

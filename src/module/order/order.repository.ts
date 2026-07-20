@@ -48,6 +48,7 @@ export interface IOrderRepository {
     query: OrderQuery,
   ): Promise<IPaginatedResult<Order>>;
   updateStatus(id: string, status: string): Promise<Order | null>;
+  updatePaymentStatus(id: string, paymentStatus: string): Promise<Order | null>;
   updateOrderItemReviewStatus(
     orderId: string,
     productId: string,
@@ -73,6 +74,7 @@ export class OrderRepository implements IOrderRepository {
     shippingAddress: string;
     shippingPhone: string;
     paymentMethod: string;
+    status?: string; // Optional — mặc định "pending", VNPay dùng "pending_payment"
     items: {
       productId: string;
       quantity: number;
@@ -89,6 +91,7 @@ export class OrderRepository implements IOrderRepository {
           shippingAddress: data.shippingAddress,
           shippingPhone: data.shippingPhone,
           paymentMethod: data.paymentMethod,
+          ...(data.status ? { status: data.status } : {}),
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
@@ -283,6 +286,19 @@ export class OrderRepository implements IOrderRepository {
       return await this.prisma.order.update({
         where: { id },
         data: { status },
+      });
+    } catch (error: any) {
+      if (error.code === "P2025") return null;
+      throw error;
+    }
+  }
+
+  // Cập nhật trạng thái thanh toán (VNPay IPN callback)
+  async updatePaymentStatus(id: string, paymentStatus: string): Promise<Order | null> {
+    try {
+      return await this.prisma.order.update({
+        where: { id },
+        data: { paymentStatus },
       });
     } catch (error: any) {
       if (error.code === "P2025") return null;

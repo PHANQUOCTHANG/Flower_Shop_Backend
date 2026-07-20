@@ -63,6 +63,19 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   sendAuthResponse(res, result, 200);
 });
 
+// POST | /api/auth/google
+export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
+  const { token } = req.body;
+  if (!token) {
+    return res.status(400).json({
+      status: "error",
+      message: "Token Google không được bỏ trống",
+    });
+  }
+  const result = await authService.loginWithGoogle(token);
+  sendAuthResponse(res, result, 200);
+});
+
 // POST | /api/auth/refresh
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.refreshToken;

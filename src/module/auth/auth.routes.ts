@@ -25,6 +25,9 @@ router.post(
 // POST | /api/auth/login | Đăng nhập
 router.post("/login", authRateLimiter, validationMiddleware(loginSchema), authCtrl.login);
 
+// POST | /api/auth/google | Đăng nhập bằng Google
+router.post("/google", authRateLimiter, authCtrl.googleLogin);
+
 // POST | /api/auth/refresh-token | Làm mới access token
 router.post("/refresh-token", authCtrl.refresh);
 

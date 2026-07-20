@@ -16,6 +16,7 @@ import {
   setCache,
   deleteCache,
 } from "@/utils/cache";
+import { OAuth2Client } from "google-auth-library";
 
 // Kết quả nội bộ — thêm refreshTokenExpiresAt để controller set cookie chính xác
 interface AuthResult {
@@ -29,6 +30,7 @@ interface AuthResult {
 export interface IAuthService {
   register(dto: RegisterRequest): Promise<AuthResponseDto>;
   login(dto: LoginRequest): Promise<AuthResponseDto>;
+  loginWithGoogle(idToken: string): Promise<AuthResponseDto>;
   refresh(refreshToken: string): Promise<AuthResponseDto>;
   logout(refreshToken: string): Promise<void>;
   resetPassword(dto: ResetPasswordRequest): Promise<AuthResponseDto>;
@@ -64,7 +66,7 @@ export class AuthService implements IAuthService {
       result.refreshToken,
       result.refreshTokenExpiresAt, // <-- truyền xuống DTO
       result.rememberMe,
-    );
+    ); 
   }
 
   async login(dto: LoginRequest): Promise<AuthResponseDto> {
@@ -81,6 +83,74 @@ export class AuthService implements IAuthService {
       throw new AppError("Tài khoản đã bị khóa hoặc chưa kích hoạt", 403);
 
     const result = await this.generateAuthResult(user, dto.rememberMe);
+    return AuthResponseDto.from(
+      result.user,
+      result.accessToken,
+      result.refreshToken,
+      result.refreshTokenExpiresAt,
+      result.rememberMe,
+    );
+  }
+
+  async loginWithGoogle(idToken: string): Promise<AuthResponseDto> {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      throw new AppError("Google Client ID chưa được cấu hình", 500);
+    }
+
+    const client = new OAuth2Client(clientId);
+    let payload;
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: clientId,
+      });
+      payload = ticket.getPayload();
+    } catch (error) {
+      // Thử dùng như access_token nếu verifyIdToken thất bại
+      try {
+        const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!response.ok) throw new Error("Invalid token");
+        payload = await response.json();
+      } catch (fetchError) {
+        throw new AppError("Token Google không hợp lệ hoặc đã hết hạn", 401);
+      }
+    }
+
+    if (!payload || !payload.email) {
+      throw new AppError("Không lấy được thông tin email từ Google", 400);
+    }
+
+    const { email, sub: googleId, name, picture } = payload;
+
+    let user = await this.userRepo.findByEmail(email);
+
+    if (user) {
+      if (user.provider !== "GOOGLE" || !user.providerId) {
+        user = await this.userRepo.updateByEmail(email, {
+          provider: "GOOGLE",
+          providerId: googleId,
+          ...(user.avatar ? {} : { avatar: picture }),
+        });
+      }
+      
+      if (!user.isActive) {
+        throw new AppError("Tài khoản đã bị khóa hoặc chưa kích hoạt", 403);
+      }
+    } else {
+      user = await this.userRepo.create({
+        email,
+        fullName: name || "Google User",
+        provider: "GOOGLE",
+        providerId: googleId,
+        avatar: picture,
+        role: "CUSTOMER",
+      });
+    }
+
+    const result = await this.generateAuthResult(user, true); // Keep login for longer via rememberMe=true
     return AuthResponseDto.from(
       result.user,
       result.accessToken,

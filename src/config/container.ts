@@ -134,3 +134,7 @@ export const reviewService: IReviewService = new ReviewService(
   orderService,
 );
 export const reviewImageService = new ReviewImageService();
+
+// VNPay
+import { VnpayService, IVnpayService } from "@/module/vnpay/vnpay.service";
+export const vnpayService: IVnpayService = new VnpayService();

@@ -18,6 +18,8 @@ import { DashboardStats } from "./order.repository";
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
+  createPendingVnpayOrder(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
+  confirmVnpayPayment(orderId: string): Promise<OrderResponseDto>;
   findAll(query: OrderQuery): Promise<any>;
   findByUserId(userId: string, query: OrderQuery): Promise<any>;
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
@@ -339,6 +341,135 @@ export class OrderService implements IOrderService {
     ]);
 
     return updated;
+  }
+
+  // ─── VNPay: Tạo đơn hàng chờ thanh toán ──────────────────────────────────────
+  // Chỉ tạo order với status="pending_payment"
+  // KHÔNG xóa giỏ hàng, KHÔNG gửi email, KHÔNG thông báo admin
+  async createPendingVnpayOrder(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
+    const cart = await this.cartRepo.findByUserId(userId);
+    if (!cart || cart.items.length === 0) {
+      throw new AppError("Giỏ hàng của bạn đang trống", 400);
+    }
+
+    let totalPrice = 0;
+    const orderItems = [];
+
+    for (const item of cart.items) {
+      const product = item.product;
+      const itemPrice = Number(product.price);
+      const subtotal = itemPrice * item.quantity;
+      totalPrice += subtotal;
+      orderItems.push({
+        productId: product.id,
+        quantity: item.quantity,
+        price: itemPrice,
+        subtotal,
+      });
+    }
+
+    // Tạo order với status="pending_payment" — chưa xác nhận thanh toán
+    const order = await this.orderRepo.createOrder({
+      userId,
+      totalPrice,
+      shippingAddress: dto.shippingAddress,
+      shippingPhone: dto.shippingPhone,
+      paymentMethod: dto.paymentMethod,
+      status: "pending_payment",
+      items: orderItems,
+    });
+
+    // Chỉ invalidate cache đơn hàng (giỏ hàng giữ nguyên)
+    await Promise.all([
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
+    ]);
+
+    return OrderResponseDto.from(order);
+  }
+
+  // ─── VNPay: Xác nhận thanh toán thành công ──────────────────────────────────
+  // Gọi khi IPN callback xác nhận thanh toán OK
+  // Lúc này mới: cập nhật status, xóa giỏ hàng, gửi email, thông báo admin
+  async confirmVnpayPayment(orderId: string): Promise<OrderResponseDto> {
+    // 1. Lấy order từ DB
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) {
+      throw new AppError("Không tìm thấy đơn hàng", 404);
+    }
+
+    // Tránh xử lý trùng (IPN có thể gọi nhiều lần)
+    if (order.paymentStatus === "paid") {
+      return OrderResponseDto.from(order);
+    }
+
+    // 2. Cập nhật paymentStatus = "paid" và status = "pending" (chuyển sang luồng bình thường)
+    await this.orderRepo.updatePaymentStatus(orderId, "paid");
+    const updatedOrder = await this.orderRepo.updateStatus(orderId, "pending");
+    if (!updatedOrder) {
+      throw new AppError("Không thể cập nhật đơn hàng", 500);
+    }
+
+    // 3. Xóa giỏ hàng
+    const cart = await this.cartRepo.findByUserId(order.userId);
+    if (cart) {
+      await this.cartRepo.clearCart(cart.id);
+    }
+
+    // 4. Ghi log + thông báo admin
+    const totalPrice = Number(order.totalPrice);
+    const message = `Có đơn hàng mới thanh toán VNPay thành công với giá trị ${totalPrice.toLocaleString("vi-VN")}đ`;
+
+    await this.activityLogService.create({
+      type: "ORDER_CREATED",
+      message,
+      data: { orderId: order.id, totalPrice, paymentMethod: "vnpay" },
+    });
+
+    getIO().to("chat:admin").emit("order:new", {
+      orderId: order.id,
+      totalPrice,
+      message,
+      createdAt: order.createdAt,
+    });
+
+    // 5. Gửi email xác nhận
+    const user = await this.userRepo.findById(order.userId);
+    if (user?.email) {
+      try {
+        const fullOrder = await this.orderRepo.findById(order.id);
+        if (fullOrder) {
+          await this.emailService.sendOrderConfirmation(user.email, {
+            orderId: fullOrder.id,
+            customerName: user.fullName || "Khách hàng",
+            totalPrice: fullOrder.totalPrice,
+            shippingAddress: fullOrder.shippingAddress,
+            shippingPhone: fullOrder.shippingPhone,
+            items: fullOrder.items || [],
+            createdAt: fullOrder.createdAt,
+          });
+        }
+      } catch (error: any) {
+        // Không fail khi gửi email lỗi
+      }
+    }
+
+    // 6. Thông báo realtime cho user
+    getIO().to(`user:${order.userId}`).emit("order:payment_updated", {
+      orderId: order.id,
+      paymentStatus: "paid",
+    });
+
+    // 7. Xóa cache
+    await Promise.all([
+      deleteCache(`${this.CART_CACHE_KEY}:${order.userId}`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:id:${orderId}:user:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${order.userId}:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
+      deleteCache(`${this.CACHE_KEY}:dashboard:stats`),
+    ]);
+
+    return OrderResponseDto.from(updatedOrder);
   }
 
   // Dashboard stats (admin) — cache 5 phút

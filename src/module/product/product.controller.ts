@@ -15,6 +15,7 @@ function extractFiles(req: Request, field: string): Express.Multer.File[] {
 // [POST] /api/v1/products - Tạo sản phẩm mới
 export const createProduct = asyncHandler(
   async (req: Request, res: Response): Promise<Response> => {
+
     // Xử lý ảnh gallery từ middleware upload
     const galleryFiles = extractFiles(req, "images");
     const images =
@@ -81,7 +82,7 @@ export const updateProduct = asyncHandler(
   async (req: Request, res: Response): Promise<Response> => {
     const galleryFiles = extractFiles(req, "images");
     const {
-      thumbnailEmpty = false,
+      thumbnailEmpty = false,        
       deletedImageIds = [],
       ...updateBody
     } = req.body;
