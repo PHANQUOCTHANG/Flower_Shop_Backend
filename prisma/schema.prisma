@@ -50,6 +50,7 @@ model User {
   chats         Chat[]       @relation("UserChats")
   adminChats    Chat[]       @relation("AdminChats")
   messages      Message[]
+  wishlists     Wishlist[]
 
   @@map("users")
   // --- Index hiện tại của bạn ---
@@ -139,6 +140,8 @@ model Product {
   cartItems  CartItem[]
   orderItems OrderItem[]
   reviews    Review[]
+  saleItems  SaleCampaignItem[]
+  wishlists  Wishlist[]
 
   @@map("products")
   @@index([sku])
@@ -173,6 +176,7 @@ model ProductImage {
   @@map("product_images")
   @@index([productId])
 }
+
 
 model Cart {
   id        String   @id @default(uuid())
@@ -372,3 +376,60 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+model SaleCampaign {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  type        String   @default("FLASH_SALE") @db.VarChar(50) // "FLASH_SALE", "EVENT_SALE"
+  status      String   @default("DRAFT") @db.VarChar(50)      // "DRAFT", "SCHEDULED", "ACTIVE", "ENDED"
+  startDate   DateTime @map("start_date") @db.Timestamptz
+  endDate     DateTime @map("end_date") @db.Timestamptz
+  bannerUrl   String?  @map("banner_url") @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  items       SaleCampaignItem[]
+
+  @@map("sale_campaigns")
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model SaleCampaignItem {
+  id            String   @id @default(uuid())
+  campaignId    String   @map("campaign_id")
+  productId     String   @map("product_id")
+  discountValue Decimal  @map("discount_value") @db.Decimal(12, 2)
+  discountType  String   @default("PERCENTAGE") @map("discount_type") @db.VarChar(20) // "PERCENTAGE", "FIXED_AMOUNT"
+  salePrice     Decimal  @map("sale_price") @db.Decimal(12, 2)
+  limitQuantity Int?     @map("limit_quantity")
+  soldQuantity  Int      @default(0) @map("sold_quantity")
+  
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  campaign SaleCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product  Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, productId])
+  @@map("sale_campaign_items")
+  @@index([campaignId])
+  @@index([productId])
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlists")
+  @@index([userId])
+}

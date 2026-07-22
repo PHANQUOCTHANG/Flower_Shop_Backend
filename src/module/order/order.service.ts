@@ -1,5 +1,6 @@
 import AppError from "@/utils/appError";
 import { IOrderRepository } from "./order.repository";
+import { CampaignRepository } from "../campaign/campaign.repository";
 import { ICartRepository } from "../cart/cart.repository";
 import { OrderResponseDto } from "./order.response";
 import { CheckoutDto } from "@/module/order/order.request";
@@ -61,12 +62,17 @@ export class OrderService implements IOrderService {
 
     let totalPrice = 0;
     const orderItems = [];
+    const activeCampaign = await new CampaignRepository().findActiveCampaign();
 
     // Tính giá sản phẩm (snapshot)
     for (const item of cart.items) {
       const product = item.product;
 
-      const itemPrice = Number(product.price);
+      let itemPrice = Number(product.price);
+      if (activeCampaign) {
+        const saleItem = activeCampaign.items.find((i: any) => i.productId === product.id);
+        if (saleItem) itemPrice = Number(saleItem.salePrice);
+      }
       const subtotal = itemPrice * item.quantity;
       totalPrice += subtotal;
 
@@ -353,11 +359,16 @@ export class OrderService implements IOrderService {
     }
 
     let totalPrice = 0;
+    const activeCampaign = await new CampaignRepository().findActiveCampaign();
     const orderItems = [];
 
     for (const item of cart.items) {
       const product = item.product;
-      const itemPrice = Number(product.price);
+      let itemPrice = Number(product.price);
+      if (activeCampaign) {
+        const saleItem = activeCampaign.items.find((i: any) => i.productId === product.id);
+        if (saleItem) itemPrice = Number(saleItem.salePrice);
+      }
       const subtotal = itemPrice * item.quantity;
       totalPrice += subtotal;
       orderItems.push({
