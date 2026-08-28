@@ -33,7 +33,7 @@ const sendAuthResponse = (
   // 2. Role — httpOnly để Next.js middleware đọc, JS/DevTools không sửa được
   res.cookie("role", (result.user?.role ?? "").toUpperCase(), {
     ...cookieOptions,
-    httpOnly: true,
+    httpOnly: true, // KHÔNG thể đọc/sửa từ browser
   });
 
   return res.status(statusCode).json({
@@ -98,7 +98,7 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
   // Khi clearCookie, các option (path, domain, secure, sameSite) PHẢI KHỚP với lúc tạo
   const clearOptions = getCookieOptions();
   res.clearCookie("refreshToken", clearOptions);
-  res.clearCookie("role", clearOptions);
+  res.clearCookie("role", clearOptions); // Xóa role cookie khi logout
 
   res.status(200).json({
     status: "success",
