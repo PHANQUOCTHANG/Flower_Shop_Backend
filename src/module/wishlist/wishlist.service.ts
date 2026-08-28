@@ -1,8 +1,14 @@
 import AppError from "@/utils/appError";
-import { WishlistRepository } from "./wishlist.repository";
+import { IWishlistRepository } from "./wishlist.repository";
 
-export class WishlistService {
-  private repo = new WishlistRepository();
+export interface IWishlistService {
+  getWishlist(userId: string, page: number, limit: number): Promise<any>;
+  getWishlistProductIds(userId: string): Promise<string[]>;
+  toggleWishlist(userId: string, productId: string): Promise<{ added: boolean }>;
+}
+
+export class WishlistService implements IWishlistService {
+  constructor(private readonly repo: IWishlistRepository) {}
 
   async getWishlist(userId: string, page: number, limit: number) {
     const result = await this.repo.findByUserId(userId, page, limit);

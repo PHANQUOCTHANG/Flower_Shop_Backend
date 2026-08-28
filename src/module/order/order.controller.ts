@@ -8,83 +8,108 @@ import { normalizeQueryOrder, OrderQuery } from "@/module/order/order.type";
 
 import { orderQueue } from "@/config/queue";
 import AppError from "@/utils/appError";
+import redisClient from "@/config/redis";
 
 // [POST] /api/v1/orders - Đặt hàng
 export const checkout = asyncHandler(async (req: Request, res: Response) => {
   const userId = getUserId(req);
 
-  // Kiểm tra cart sớm để không đưa job rỗng vào queue
-  const cart = await cartService.getCart(userId);
-  if (!cart || cart.items.length === 0) {
-    throw new AppError("Giỏ hàng của bạn đang trống", 400);
-  }
-
-  const isVnpay = req.body.paymentMethod === "vnpay";
-
-  // Nếu là VNPay → xử lý đồng bộ ngay lập tức để lấy URL (KHÔNG đưa vào queue)
-  if (isVnpay) {
-    const order = await orderService.createPendingVnpayOrder(userId, req.body);
-    const vnpayUrl = vnpayService.createPaymentUrl({
-      orderId: order.id,
-      amount: order.totalPrice,
-      orderInfo: `Thanh toan don hang ${order.id}`,
-      ipAddress: req.ip || req.headers["x-forwarded-for"] as string || "127.0.0.1",
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Đơn hàng đang chờ thanh toán VNPay",
-      data: {
-        orderId: order.id,
-        status: "pending_payment",
-        vnpayUrl,
-      },
-    });
-  }
-
-  // Các phương thức khác (COD, Bank, Wallet) → Đưa vào background queue
-  let job;
+  // Khóa Redis để ngăn double-click / race condition (10 giây)
+  // Nếu Redis hết quota hoặc sập → bỏ qua lock, vẫn cho đặt hàng bình thường
+  const lockKey = `checkout:lock:${userId}`;
+  let redisAvailable = true;
   try {
-    // Đưa job vào queue, KHÔNG chờ kết quả
-    job = await orderQueue.add(
-      "process-checkout",
-      {
-        userId,
-        dto: req.body,
-        cartId: cart.id,
-      },
-      {
-        // Deduplicate: cùng user không được có 2 job pending cùng lúc
-        jobId: `checkout:${userId}:${Date.now()}`,
-      },
-    );
+    const lockAcquired = await redisClient.set(lockKey, "1", { NX: true, EX: 10 });
+    if (!lockAcquired) {
+      throw new AppError("Đơn hàng của bạn đang được xử lý, vui lòng không nhấn đặt hàng nhiều lần!", 429);
+    }
+  } catch (lockError: any) {
+    // Nếu là lỗi "đang xử lý" (do chính ta throw) → trả về lỗi đó cho client
+    if (lockError instanceof AppError) throw lockError;
+    // Nếu là lỗi Redis (quota/outage) → log cảnh báo và tiếp tục, không chặn đặt hàng
+    redisAvailable = false;
+    console.warn("[Checkout] Redis lock không khả dụng, tiếp tục không có lock:", lockError?.message);
+  }
 
-    // Trả về ngay 202 — client dùng jobId để track qua WebSocket
-    return res.status(202).json({
-      success: true,
-      message: "Đơn hàng đang được xử lý",
-      data: {
-        jobId: job.id,
-        status: "queued",
-      },
-    });
-  } catch (queueError) {
-    // Nếu là VNPay và đã xử lý ở trên thì không vào đây
-    if (isVnpay) throw queueError;
+  try {
+    // Kiểm tra cart sớm để không đưa job rỗng vào queue
+    const cart = await cartService.getCart(userId);
+    if (!cart || cart.items.length === 0) {
+      throw new AppError("Giỏ hàng của bạn đang trống", 400);
+    }
 
-    console.error("[BullMQ Fallback] Redis quá tải hoặc sập, chuyển sang xử lý đặt hàng đồng bộ thẳng xuống DB:", queueError);
+    const isVnpay = req.body.paymentMethod === "vnpay";
 
-    // Fallback: Xử lý đơn hàng trực tiếp ngay lập tức
-    const order = await orderService.checkout(userId, req.body);
-    
-    return res.status(201).json({
-      success: true,
-      message: "Đặt hàng thành công",
-      data: {
+    // Nếu là VNPay → xử lý đồng bộ ngay lập tức để lấy URL (KHÔNG đưa vào queue)
+    if (isVnpay) {
+      const order = await orderService.createPendingVnpayOrder(userId, req.body);
+      const vnpayUrl = vnpayService.createPaymentUrl({
         orderId: order.id,
-        status: "completed",
-      },
-    });
+        amount: order.totalPrice,
+        orderInfo: `Thanh toan don hang ${order.id}`,
+        ipAddress: req.ip || req.headers["x-forwarded-for"] as string || "127.0.0.1",
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Đơn hàng đang chờ thanh toán VNPay",
+        data: {
+          orderId: order.id,
+          status: "pending_payment",
+          vnpayUrl,
+        },
+      });
+    }
+
+    // Các phương thức khác (COD, Bank, Wallet) → Đưa vào background queue
+    let job;
+    try {
+      // Đưa job vào queue, KHÔNG chờ kết quả
+      job = await orderQueue.add(
+        "process-checkout",
+        {
+          userId,
+          dto: req.body,
+          cartId: cart.id,
+        },
+        {
+          // Deduplicate: bỏ Date.now() để BullMQ ngăn trùng lặp job của cùng 1 user
+          jobId: `checkout:${userId}`,
+        },
+      );
+
+      // Trả về ngay 202 — client dùng jobId để track qua WebSocket
+      return res.status(202).json({
+        success: true,
+        message: "Đơn hàng đang được xử lý",
+        data: {
+          jobId: job.id,
+          status: "queued",
+        },
+      });
+    } catch (queueError) {
+      // Nếu là VNPay và đã xử lý ở trên thì không vào đây
+      if (isVnpay) throw queueError;
+
+      console.error("[BullMQ Fallback] Redis quá tải hoặc sập, chuyển sang xử lý đặt hàng đồng bộ thẳng xuống DB:", queueError);
+
+      // Fallback: Xử lý đơn hàng trực tiếp ngay lập tức
+      const order = await orderService.checkout(userId, req.body);
+      
+      return res.status(201).json({
+        success: true,
+        message: "Đặt hàng thành công",
+        data: {
+          orderId: order.id,
+          status: "completed",
+        },
+      });
+    }
+  } finally {
+    // Chỉ xóa lock nếu Redis đang hoạt động bình thường
+    if (redisAvailable) {
+      await redisClient.del(lockKey).catch(() => {});
+    }
   }
 });
 

@@ -57,3 +57,15 @@ export const orderQueue = new Queue("process-checkout", {
 export const orderQueueEvents = new QueueEvents("process-checkout", {
   connection: getBullMQRedis(), // Dùng cùng singleton
 });
+
+// ─── VNPay Cleanup Queue ──────────────────────────────────────────────────────
+// Hủy các đơn pending_payment sau 15 phút nếu VNPay không callback
+export const vnpayCleanupQueue = new Queue("vnpay-cleanup", {
+  connection: getBullMQRedis(),
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: "fixed", delay: 5000 },
+    removeOnComplete: { age: 3600 },
+    removeOnFail: { age: 86400 },
+  },
+});

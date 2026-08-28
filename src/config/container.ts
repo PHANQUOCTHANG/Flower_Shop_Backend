@@ -24,7 +24,7 @@ import {
   CategoryRepository,
   ICategoryRepository,
 } from "@/module/category/category.repository";
-import { CategoryService } from "@/module/category/category.service";
+import { CategoryService, ICategoryService } from "@/module/category/category.service";
 import { ChatRepository, IChatRepository } from "@/module/chat/chat.repository";
 import { ChatService, IChatService } from "@/module/chat/chat.service";
 import {
@@ -32,20 +32,25 @@ import {
   OrderRepository,
 } from "@/module/order/order.repository";
 import { IOrderService, OrderService } from "@/module/order/order.service";
-import { ImageService } from "@/module/product/image.service";
+import {
+  CampaignRepository,
+  ICampaignRepository,
+} from "@/module/campaign/campaign.repository";
+import { CampaignService, ICampaignService } from "@/module/campaign/campaign.service";
+import { ImageService, IImageService } from "@/module/product/image.service";
 import {
   IProductRepository,
   ProductRepository,
 } from "@/module/product/product.repository";
-import { ProductService } from "@/module/product/product.service";
+import { ProductService, IProductService } from "@/module/product/product.service";
 import { IUserRepository, UserRepository } from "@/module/user/user.repository";
-import { UserService } from "@/module/user/user.service";
+import { UserService, IUserService } from "@/module/user/user.service";
 import { IReviewService, ReviewService } from "@/module/review/review.service";
 import {
   IReviewRepository,
   ReviewRepository,
 } from "@/module/review/review.repository";
-import { ReviewImageService } from "@/module/review/review.image.service";
+import { ReviewImageService, IReviewImageService } from "@/module/review/review.image.service";
 import {
   IActivityLogRepository,
   ActivityLogRepository,
@@ -54,18 +59,27 @@ import {
   IActivityLogService,
   ActivityLogService,
 } from "@/module/activity-log/activity-log.service";
+import {
+  IWishlistRepository,
+  WishlistRepository,
+} from "@/module/wishlist/wishlist.repository";
+import {
+  IWishlistService,
+  WishlistService,
+} from "@/module/wishlist/wishlist.service";
 
 // User
+// User
 const userRepository: IUserRepository = new UserRepository(prisma);
-export const userService = new UserService(userRepository);
+export const userService: IUserService = new UserService(userRepository);
 
 // Product
 const productRepository: IProductRepository = new ProductRepository(prisma);
-export const productService = new ProductService(productRepository);
+export const productService: IProductService = new ProductService(productRepository);
 
 // Category
 const categoryRepository: ICategoryRepository = new CategoryRepository(prisma);
-export const categoryService = new CategoryService(categoryRepository);
+export const categoryService: ICategoryService = new CategoryService(categoryRepository);
 
 // Email
 export const emailService: IEmailService = new EmailService();
@@ -103,6 +117,10 @@ export const activityLogService: IActivityLogService = new ActivityLogService(
   activityLogRepository,
 );
 
+// Campaign
+const campaignRepository: ICampaignRepository = new CampaignRepository(prisma);
+export const campaignService: ICampaignService = new CampaignService(campaignRepository);
+
 // Order
 const orderRepository: IOrderRepository = new OrderRepository(prisma);
 export const orderService: IOrderService = new OrderService(
@@ -111,8 +129,9 @@ export const orderService: IOrderService = new OrderService(
   userRepository,
   activityLogService,
   emailService,
+  campaignRepository,
 );
-export const imageService = new ImageService();
+export const imageService: IImageService = new ImageService();
 
 // Chat
 const chatRepository: IChatRepository = new ChatRepository(prisma);
@@ -133,7 +152,13 @@ export const reviewService: IReviewService = new ReviewService(
   reviewRepository,
   orderService,
 );
-export const reviewImageService = new ReviewImageService();
+export const reviewImageService: IReviewImageService = new ReviewImageService();
+
+// Wishlist
+const wishlistRepository: IWishlistRepository = new WishlistRepository(prisma);
+export const wishlistService: IWishlistService = new WishlistService(
+  wishlistRepository,
+);
 
 // VNPay
 import { VnpayService, IVnpayService } from "@/module/vnpay/vnpay.service";

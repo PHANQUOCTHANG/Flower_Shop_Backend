@@ -24,7 +24,7 @@ const clientRoute = (app: Application) => {
   app.use(path + "/auth", authRoute);
   app.use(path + "/cart", requireAuth, cartRoute);
   app.use(path + "/orders", requireAuth, orderRoute);
-  app.use(path + "/addresses", addressRouter);
+  app.use(path + "/addresses", requireAuth, addressRouter);
   app.use(path + "/chats", requireAuth, chatRoute);
   app.use(path + "/reviews", reviewRoute);
   app.use(path + "/activity-logs", requireAuth, activityLogRoute);

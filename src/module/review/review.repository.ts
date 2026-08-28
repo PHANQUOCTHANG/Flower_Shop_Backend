@@ -5,6 +5,7 @@ export interface IReviewRepository {
   findByProductId(productId: string, query: any): Promise<any>;
   findByProductSlug(slug: string, query: any): Promise<any>;
   checkUserPurchased(userId: string, productId: string): Promise<boolean>;
+  checkUserAlreadyReviewed(userId: string, productId: string): Promise<boolean>;
   findById(id: string): Promise<Review | null>;
   softDelete(id: string): Promise<void>;
 }
@@ -128,6 +129,15 @@ export class ReviewRepository implements IReviewRepository {
       },
     });
     return !!order;
+  }
+
+  // Kiểm tra user đã review sản phẩm này chưa (chỉ tính active review, bỏ qua đã soft-delete)
+  async checkUserAlreadyReviewed(userId: string, productId: string): Promise<boolean> {
+    const existing = await this.prisma.review.findFirst({
+      where: { userId, productId, deletedAt: null },
+      select: { id: true },
+    });
+    return !!existing;
   }
 
   async findById(id: string): Promise<Review | null> {

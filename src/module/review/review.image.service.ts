@@ -1,7 +1,12 @@
 import cloudinary from "@/config/cloudinary";
 
+export interface IReviewImageService {
+  convertUploadedFilesToMedia(files: Express.Multer.File[]): any[];
+  deleteMultiple(publicIds: string[]): Promise<any[]>;
+}
+
 // Service xử lý media (ảnh/video) cho review — pattern giống ImageService của product
-export class ReviewImageService {
+export class ReviewImageService implements IReviewImageService {
   // Chuyển file multer thành định dạng lưu DB (lấy path/filename do CloudinaryStorage set)
   convertUploadedFilesToMedia(files: Express.Multer.File[]) {
     return files.map((file) => ({

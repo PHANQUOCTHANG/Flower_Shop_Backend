@@ -62,8 +62,21 @@ export class CartService implements ICartService {
       const newQuantity = existingItem.quantity + quantity;
       await this.cartRepo.updateQuantity(existingItem.id, newQuantity);
     } else {
-      // Create: new item
-      await this.cartRepo.addItem(cart.id, productId, quantity);
+      try {
+        // Create: new item
+        await this.cartRepo.addItem(cart.id, productId, quantity);
+      } catch (err: any) {
+        // P2002: Unique constraint failed — race condition (2 request cùng lúc)
+        // Fallback: tìm item vừa được tạo bởi request kia rồi cộng thêm quantity
+        if (err?.code === "P2002") {
+          const raceItem = await this.cartRepo.findItemInCart(cart.id, productId);
+          if (raceItem) {
+            await this.cartRepo.updateQuantity(raceItem.id, raceItem.quantity + quantity);
+          }
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Xóa cache (giỏ hàng đã thay đổi)

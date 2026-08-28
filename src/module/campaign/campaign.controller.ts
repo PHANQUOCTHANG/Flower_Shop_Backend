@@ -1,83 +1,53 @@
-import { NextFunction, Request, Response } from "express";
-import { CampaignService } from "./campaign.service";
-import { CreateCampaignSchema, UpdateCampaignSchema, CampaignIdParamSchema } from "./campaign.request";
+import { Request, Response } from "express";
+import { campaignService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
+import asyncHandler from "@/utils/asyncHandler";
 
-export class CampaignController {
-  private campaignService = new CampaignService();
+// [POST] /api/v1/campaigns — Tạo chiến dịch mới (Admin)
+export const createCampaign = asyncHandler(async (req: Request, res: Response) => {
+  const campaign = await campaignService.createCampaign(req.body);
+  return res.status(201).json(ApiResponse.success(campaign, "Tạo chiến dịch thành công"));
+});
 
-  createCampaign = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const data = CreateCampaignSchema.parse(req.body);
-      const campaign = await this.campaignService.createCampaign(data);
-      res.status(201).json(ApiResponse.success(campaign, "Tạo chiến dịch thành công"));
-    } catch (error) {
-      next(error);
-    }
-  };
+// [GET] /api/v1/campaigns — Lấy danh sách chiến dịch (Admin)
+export const getCampaigns = asyncHandler(async (req: Request, res: Response) => {
+  const campaigns = await campaignService.getCampaigns(req.query);
+  return res.status(200).json(ApiResponse.success(campaigns));
+});
 
-  getCampaigns = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const campaigns = await this.campaignService.getCampaigns(req.query);
-      res.status(200).json(ApiResponse.success(campaigns));
-    } catch (error) {
-      next(error);
-    }
-  };
+// [GET] /api/v1/campaigns/active — Lấy chiến dịch đang active (Public)
+export const getActiveCampaign = asyncHandler(async (_req: Request, res: Response) => {
+  const active = await campaignService.getActiveCampaign();
+  return res.status(200).json(ApiResponse.success(active));
+});
 
-  getCampaignById = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = CampaignIdParamSchema.parse(req.params);
-      const campaign = await this.campaignService.getCampaignById(id);
-      res.status(200).json(ApiResponse.success(campaign));
-    } catch (error) {
-      next(error);
-    }
-  };
+// [GET] /api/v1/campaigns/active/items — Lấy sản phẩm trong campaign active (Public)
+export const getActiveCampaignItems = asyncHandler(async (req: Request, res: Response) => {
+  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
+  const limit = Math.min(40, Math.max(1, parseInt(String(req.query.limit || "8"), 10)));
+  const result = await campaignService.getActiveCampaignItems(page, limit);
+  return res.status(200).json({
+    status: "success",
+    data: result.items,
+    campaign: result.campaign,
+    meta: result.meta,
+  });
+});
 
-  updateCampaign = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = CampaignIdParamSchema.parse(req.params);
-      const data = UpdateCampaignSchema.parse(req.body);
-      const campaign = await this.campaignService.updateCampaign(id, data);
-      res.status(200).json(ApiResponse.success(campaign, "Cập nhật chiến dịch thành công"));
-    } catch (error) {
-      next(error);
-    }
-  };
+// [GET] /api/v1/campaigns/:id — Lấy chi tiết chiến dịch (Admin)
+export const getCampaignById = asyncHandler(async (req: Request, res: Response) => {
+  const campaign = await campaignService.getCampaignById(req.params.id as string);
+  return res.status(200).json(ApiResponse.success(campaign));
+});
 
-  deleteCampaign = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = CampaignIdParamSchema.parse(req.params);
-      await this.campaignService.deleteCampaign(id);
-      res.status(200).json(ApiResponse.success(null, "Xóa chiến dịch thành công"));
-    } catch (error) {
-      next(error);
-    }
-  };
+// [PUT] /api/v1/campaigns/:id — Cập nhật chiến dịch (Admin)
+export const updateCampaign = asyncHandler(async (req: Request, res: Response) => {
+  const campaign = await campaignService.updateCampaign(req.params.id as string, req.body);
+  return res.status(200).json(ApiResponse.success(campaign, "Cập nhật chiến dịch thành công"));
+});
 
-  getActiveCampaign = async (_req: Request, res: Response, next: NextFunction) => {
-    try {
-      const active = await this.campaignService.getActiveCampaign();
-      res.status(200).json(ApiResponse.success(active));
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getActiveCampaignItems = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-      const limit = Math.min(40, Math.max(1, parseInt(String(req.query.limit || "8"), 10)));
-      const result = await this.campaignService.getActiveCampaignItems(page, limit);
-      res.status(200).json({
-        status: "success",
-        data: result.items,
-        campaign: result.campaign,
-        meta: result.meta,
-      });
-    } catch (error) {
-      next(error);
-    }
-  };
-}
+// [DELETE] /api/v1/campaigns/:id — Xóa chiến dịch (Admin)
+export const deleteCampaign = asyncHandler(async (req: Request, res: Response) => {
+  await campaignService.deleteCampaign(req.params.id as string);
+  return res.status(200).json(ApiResponse.success(null, "Xóa chiến dịch thành công"));
+});

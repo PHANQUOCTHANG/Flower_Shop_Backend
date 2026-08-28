@@ -202,6 +202,7 @@ model CartItem {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("cart_items")
+  @@unique([cartId, productId]) // Ngăn duplicate item cùng product trong cùng cart (DB-level)
   @@index([cartId])
 }
 
@@ -271,6 +272,7 @@ model Review {
   @@index([productId])
   @@index([userId])
   @@index([rating])
+  @@index([userId, productId]) // Tối ưu query kiểm tra duplicate review
 }
 
 model ReviewMedia {

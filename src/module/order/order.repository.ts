@@ -40,7 +40,7 @@ export interface DashboardStats {
 }
 
 export interface IOrderRepository {
-  createOrder(data: any): Promise<Order>;
+  createOrder(data: any, cartId?: string): Promise<Order>;
   findAll(query: OrderQuery): Promise<IPaginatedResult<Order>>;
   findById(id: string): Promise<any | null>;
   findByUserId(
@@ -67,21 +67,24 @@ export interface IOrderRepository {
 export class OrderRepository implements IOrderRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  // Tạo đơn hàng
-  async createOrder(data: {
-    userId: string;
-    totalPrice: number;
-    shippingAddress: string;
-    shippingPhone: string;
-    paymentMethod: string;
-    status?: string; // Optional — mặc định "pending", VNPay dùng "pending_payment"
-    items: {
-      productId: string;
-      quantity: number;
-      price: number;
-      subtotal: number;
-    }[];
-  }): Promise<Order> {
+  // Tạo đơn hàng — nhận thêm cartId để xóa giỏ hàng trong cùng transaction (atomic)
+  async createOrder(
+    data: {
+      userId: string;
+      totalPrice: number;
+      shippingAddress: string;
+      shippingPhone: string;
+      paymentMethod: string;
+      status?: string; // Optional — mặc định "pending", VNPay dùng "pending_payment"
+      items: {
+        productId: string;
+        quantity: number;
+        price: number;
+        subtotal: number;
+      }[];
+    },
+    cartId?: string, // Nếu truyền vào, giỏ hàng sẽ được xóa ngay trong cùng transaction
+  ): Promise<Order> {
     return this.prisma.$transaction(async (tx) => {
       // Tạo order với nested write items
       const order = await tx.order.create({
@@ -105,6 +108,11 @@ export class OrderRepository implements IOrderRepository {
           items: true,
         },
       });
+
+      // Xóa giỏ hàng TRONG cùng transaction — nếu bước này lỗi, order cũng bị rollback
+      if (cartId) {
+        await tx.cartItem.deleteMany({ where: { cartId } });
+      }
 
       return order;
     });

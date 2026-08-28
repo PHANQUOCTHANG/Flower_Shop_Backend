@@ -32,7 +32,7 @@ export interface IAuthService {
   login(dto: LoginRequest): Promise<AuthResponseDto>;
   loginWithGoogle(idToken: string): Promise<AuthResponseDto>;
   refresh(refreshToken: string): Promise<AuthResponseDto>;
-  logout(refreshToken: string): Promise<void>;
+  logout(refreshToken: string, accessToken?: string): Promise<void>;
   resetPassword(dto: ResetPasswordRequest): Promise<AuthResponseDto>;
   changePassword(userId: string, dto: ChangePasswordRequest): Promise<void>;
 }
@@ -56,7 +56,7 @@ export class AuthService implements IAuthService {
     const user = await this.userRepo.create({
       ...dto,
       password: hashedPassword,
-      role: dto.role || "CUSTOMER",
+      role: "CUSTOMER",
     });
 
     const result = await this.generateAuthResult(user, false);

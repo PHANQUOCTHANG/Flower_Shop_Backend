@@ -1,6 +1,6 @@
 import AppError from "@/utils/appError";
 import { IOrderRepository } from "./order.repository";
-import { CampaignRepository } from "../campaign/campaign.repository";
+import { ICampaignRepository } from "../campaign/campaign.repository";
 import { ICartRepository } from "../cart/cart.repository";
 import { OrderResponseDto } from "./order.response";
 import { CheckoutDto } from "@/module/order/order.request";
@@ -16,6 +16,20 @@ import { IActivityLogService } from "@/module/activity-log/activity-log.service"
 import { IEmailService } from "@/module/auth/email/email.service";
 import { getIO } from "@/config/socket";
 import { DashboardStats } from "./order.repository";
+import { vnpayCleanupQueue } from "@/config/queue";
+
+// ─── State Machine: Các transition trạng thái hợp lệ ────────────────────────
+// Key: trạng thái hiện tại → Value: danh sách trạng thái có thể chuyển sang
+const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
+  pending:         ["processing", "cancelled"],   // Chờ xử lý → Đang xử lý | Hủy
+  pending_payment: ["paid", "cancelled"],          // Chờ TT VNPay → Đã TT | Hủy
+  paid:            ["processing", "cancelled"],   // Đã TT → Đang xử lý | Hủy
+  processing:      ["shipping", "cancelled"],     // Đang xử lý → Đang giao | Hủy
+  shipping:        ["delivered", "cancelled"],    // Đang giao → Đã giao | Hủy
+  delivered:       ["completed"],                 // Đã giao → Hoàn tất (xác nhận nhận hàng)
+  completed:       [],                             // Hoàn tất — không thể thay đổi
+  cancelled:       [],                             // Đã hủy — không thể thay đổi
+};
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
@@ -26,6 +40,7 @@ export interface IOrderService {
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
   updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
   cancelOrder(orderId: string, userId: string): Promise<OrderResponseDto>;
+  cancelExpiredVnpayOrder(orderId: string): Promise<void>;
   updateOrderItemReviewStatus(
     orderId: string,
     productId: string,
@@ -50,6 +65,7 @@ export class OrderService implements IOrderService {
     private readonly userRepo: IUserRepository,
     private readonly activityLogService: IActivityLogService,
     private readonly emailService: IEmailService,
+    private readonly campaignRepo: ICampaignRepository,
   ) {}
 
   // Quy trình checkout: Kiểm tra giỏ -> Khóa giá -> Tạo đơn -> Làm trống giỏ
@@ -62,21 +78,32 @@ export class OrderService implements IOrderService {
 
     let totalPrice = 0;
     const orderItems = [];
-    const activeCampaign = await new CampaignRepository().findActiveCampaign();
 
-    // Tính giá sản phẩm (snapshot)
+    // Cache campaign 60s — hot path (mỗi checkout đều gọi), giảm tải DB
+    const CAMPAIGN_CACHE_KEY = `${this.CACHE_KEY}:active_campaign`;
+    let activeCampaign = await getCache<any>(CAMPAIGN_CACHE_KEY);
+    if (!activeCampaign) {
+      activeCampaign = await this.campaignRepo.findActiveCampaign();
+      if (activeCampaign) await setCache(CAMPAIGN_CACHE_KEY, activeCampaign, 60);
+    }
+
+    // Tính giá sản phẩm (snapshot) + thu thập campaign items cần tăng soldQuantity
+    const campaignItemsToIncrement: { campaignItemId: string; quantity: number }[] = [];
     for (const item of cart.items) {
       const product = item.product;
 
       let itemPrice = Number(product.price);
       if (activeCampaign) {
         const saleItem = activeCampaign.items.find((i: any) => i.productId === product.id);
-        if (saleItem) itemPrice = Number(saleItem.salePrice);
+        if (saleItem) {
+          itemPrice = Number(saleItem.salePrice);
+          // Thu thập để increment sau khi order tạo thành công
+          campaignItemsToIncrement.push({ campaignItemId: saleItem.id, quantity: item.quantity });
+        }
       }
       const subtotal = itemPrice * item.quantity;
       totalPrice += subtotal;
 
-      // Chuẩn bị item cho order
       orderItems.push({
         productId: product.id,
         quantity: item.quantity,
@@ -85,18 +112,25 @@ export class OrderService implements IOrderService {
       });
     }
 
-    // Tạo order via repository transaction
-    const order = await this.orderRepo.createOrder({
-      userId,
-      totalPrice,
-      shippingAddress: dto.shippingAddress,
-      shippingPhone: dto.shippingPhone,
-      paymentMethod: dto.paymentMethod,
-      items: orderItems,
-    });
+    // Tạo order + xóa cart trong cùng 1 transaction (atomic)
+    const order = await this.orderRepo.createOrder(
+      {
+        userId,
+        totalPrice,
+        shippingAddress: dto.shippingAddress,
+        shippingPhone: dto.shippingPhone,
+        paymentMethod: dto.paymentMethod,
+        items: orderItems,
+      },
+      cart.id, // Truyền cartId để clearCart nằm trong cùng transaction
+    );
 
-    // Làm trống giỏ hàng
-    await this.cartRepo.clearCart(cart.id);
+    // Tăng soldQuantity cho các sản phẩm campaign (fire-and-forget, không block response)
+    if (campaignItemsToIncrement.length > 0) {
+      this.campaignRepo.incrementSoldQuantity(campaignItemsToIncrement).catch((err) =>
+        console.error("[Campaign] Không thể cập nhật soldQuantity:", err),
+      );
+    }
 
     // Ghi log + thông báo realtime cho Admin
     const message = `Có đơn hàng mới vừa được đặt với giá trị ${totalPrice.toLocaleString("vi-VN")}đ`;
@@ -219,6 +253,22 @@ export class OrderService implements IOrderService {
     orderId: string,
     status: string,
   ): Promise<OrderResponseDto> {
+    // Lấy order hiện tại để kiểm tra trạng thái
+    const currentOrder = await this.orderRepo.findById(orderId);
+    if (!currentOrder) {
+      throw new AppError("Không tìm thấy đơn hàng", 404);
+    }
+
+    // Validate state machine transition
+    const allowedNextStatuses = ORDER_STATUS_TRANSITIONS[currentOrder.status] ?? [];
+    if (!allowedNextStatuses.includes(status)) {
+      throw new AppError(
+        `Không thể chuyển đơn hàng từ "${currentOrder.status}" sang "${status}". ` +
+        `Các trạng thái hợp lệ: ${allowedNextStatuses.length > 0 ? allowedNextStatuses.join(", ") : "(không có)"}`,
+        400,
+      );
+    }
+
     const order = await this.orderRepo.updateStatus(orderId, status);
     if (!order) {
       throw new AppError("Không tìm thấy đơn hàng để cập nhật", 404);
@@ -359,7 +409,16 @@ export class OrderService implements IOrderService {
     }
 
     let totalPrice = 0;
-    const activeCampaign = await new CampaignRepository().findActiveCampaign();
+
+    // Cache campaign 60s — dùng chung cache key với checkout thường
+    const CAMPAIGN_CACHE_KEY = `${this.CACHE_KEY}:active_campaign`;
+    let activeCampaign = await getCache<any>(CAMPAIGN_CACHE_KEY);
+    if (!activeCampaign) {
+      activeCampaign = await this.campaignRepo.findActiveCampaign();
+      if (activeCampaign) await setCache(CAMPAIGN_CACHE_KEY, activeCampaign, 60);
+    }
+
+    const campaignItemsToIncrement: { campaignItemId: string; quantity: number }[] = [];
     const orderItems = [];
 
     for (const item of cart.items) {
@@ -367,7 +426,10 @@ export class OrderService implements IOrderService {
       let itemPrice = Number(product.price);
       if (activeCampaign) {
         const saleItem = activeCampaign.items.find((i: any) => i.productId === product.id);
-        if (saleItem) itemPrice = Number(saleItem.salePrice);
+        if (saleItem) {
+          itemPrice = Number(saleItem.salePrice);
+          campaignItemsToIncrement.push({ campaignItemId: saleItem.id, quantity: item.quantity });
+        }
       }
       const subtotal = itemPrice * item.quantity;
       totalPrice += subtotal;
@@ -395,6 +457,16 @@ export class OrderService implements IOrderService {
       deleteCacheByPattern(`${this.CACHE_KEY}:list:${userId}:*`),
       deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
     ]);
+
+    // Schedule cleanup job sau 15 phút — hủy nếu vẫn pending_payment
+    await vnpayCleanupQueue.add(
+      "cleanup-vnpay-order",
+      { orderId: order.id },
+      {
+        delay: 15 * 60 * 1000, // 15 phút
+        jobId: `vnpay:cleanup:${order.id}`, // Dedup — mỗi order chỉ 1 job cleanup
+      },
+    );
 
     return OrderResponseDto.from(order);
   }
@@ -493,5 +565,39 @@ export class OrderService implements IOrderService {
     await setCache(cacheKey, stats, this.CACHE_TTL_DASHBOARD);
 
     return stats;
+  }
+
+  // ─── VNPay: Hủy đơn hàng hết hạn (gọi bởi BullMQ delayed job) ──────────────
+  async cancelExpiredVnpayOrder(orderId: string): Promise<void> {
+    const order = await this.orderRepo.findById(orderId);
+    // Đơn đã thanh toán hoặc không tồn tại → bỏ qua, không làm gì
+    if (!order || order.status !== "pending_payment") return;
+
+    const updatedOrder = await this.orderRepo.updateStatus(orderId, "cancelled");
+    if (!updatedOrder) return;
+
+    // Ghi log để Admin biết
+    const shortId = updatedOrder.id.split("-")[0].toUpperCase();
+    await this.activityLogService.create({
+      type: "ORDER_CANCELLED",
+      message: `Hệ thống tự động hủy đơn VNPay #${shortId} do quá hạn 15 phút`,
+      data: { orderId: updatedOrder.id, totalPrice: updatedOrder.totalPrice },
+    });
+
+    // Xóa cache liên quan
+    await Promise.all([
+      deleteCacheByPattern(`${this.CACHE_KEY}:id:${orderId}:user:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:${updatedOrder.userId}:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:admin:all:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:customers:*`),
+      deleteCache(`${this.CACHE_KEY}:dashboard:stats`),
+    ]);
+
+    // Thông báo realtime cho user (nếu đang online)
+    getIO().to(`user:${updatedOrder.userId}`).emit("order:status_updated", {
+      orderId: updatedOrder.id,
+      status: "cancelled",
+      message: "Đơn hàng VNPay đã bị hủy do quá hạn thanh toán (15 phút)",
+    });
   }
 }

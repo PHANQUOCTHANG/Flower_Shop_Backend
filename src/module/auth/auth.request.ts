@@ -31,9 +31,6 @@ export const registerSchema = z.object({
     .min(10, "Số điện thoại không hợp lệ")
     .max(20)
     .optional(),
-
-  // Quyền người dùng - mặc định là CUSTOMER
-  role: UserRoleEnum.default("CUSTOMER").optional(),
 });
 
 // Request Đăng nhập

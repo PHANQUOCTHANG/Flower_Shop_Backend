@@ -66,6 +66,18 @@ export class ReviewService implements IReviewService {
       );
     }
 
+    // Kiểm tra đã review sản phẩm này chưa — ngăn duplicate review
+    const alreadyReviewed = await this.reviewRepo.checkUserAlreadyReviewed(
+      userId,
+      input.productId,
+    );
+    if (alreadyReviewed) {
+      throw new AppError(
+        "Bạn đã đánh giá sản phẩm này rồi. Xóa đánh giá cũ nếu muốn đánh giá lại.",
+        409,
+      );
+    }
+
     // Lưu Review (Prisma nested write tạo media cùng lúc)
     const review = await this.reviewRepo.create(userId, input);
 

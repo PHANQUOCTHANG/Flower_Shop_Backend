@@ -4,14 +4,16 @@ import crypto from "crypto";
  * Format Date → "yyyyMMddHHmmss" (yêu cầu của VNPay)
  */
 function formatVnpayDate(date: Date): string {
+  // Lấy timestamp UTC gốc và cộng cứng 7 tiếng (7 * 60 * 60 * 1000 milliseconds)
+  const vnDate = new Date(date.getTime() + 7 * 60 * 60 * 1000);
   const pad = (n: number) => n.toString().padStart(2, "0");
   return (
-    date.getFullYear().toString() +
-    pad(date.getMonth() + 1) +
-    pad(date.getDate()) +
-    pad(date.getHours()) +
-    pad(date.getMinutes()) +
-    pad(date.getSeconds())
+    vnDate.getUTCFullYear().toString() +
+    pad(vnDate.getUTCMonth() + 1) +
+    pad(vnDate.getUTCDate()) +
+    pad(vnDate.getUTCHours()) +
+    pad(vnDate.getUTCMinutes()) +
+    pad(vnDate.getUTCSeconds())
   );
 }
 

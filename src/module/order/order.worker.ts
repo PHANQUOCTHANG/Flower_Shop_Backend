@@ -105,5 +105,31 @@ export const startOrderWorker = () => {
     }
   });
 
-  return worker;
+  // ─── VNPay Cleanup Worker ────────────────────────────────────────────────────
+  // Xử lý delayed job hủy đơn hàng VNPay quá hạn 15 phút không thanh toán
+  const vnpayCleanupWorker = new Worker<{ orderId: string }>(
+    "vnpay-cleanup",
+    async (job: Job<{ orderId: string }>) => {
+      const { orderId } = job.data;
+      logger.info(`[VNPay Cleanup] Checking expired order: ${orderId}`);
+
+      try {
+        await orderService.cancelExpiredVnpayOrder(orderId);
+        logger.info(`[VNPay Cleanup] Done for order ${orderId}`);
+      } catch (error: any) {
+        logger.error(`[VNPay Cleanup] Failed for order ${orderId}: ${error.message}`);
+        throw error;
+      }
+    },
+    {
+      connection: getBullMQRedis(),
+      concurrency: 1, // Hủy lai rai, không cần concurrency cao
+    },
+  );
+
+  vnpayCleanupWorker.on("failed", (job, err) => {
+    logger.error(`[VNPay Cleanup] ❌ Job ${job?.id} failed: ${err.message}`);
+  });
+
+  return { worker, vnpayCleanupWorker };
 };

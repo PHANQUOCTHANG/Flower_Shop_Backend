@@ -1,6 +1,12 @@
 import cloudinary from "@/config/cloudinary";
 
-export class ImageService {
+export interface IImageService {
+  convertUploadedFilesToImages(files: Express.Multer.File[]): any[];
+  uploadMultiple(files: Express.Multer.File[]): Promise<any[]>;
+  deleteMultiple(publicIds: string[]): Promise<any[]>;
+}
+
+export class ImageService implements IImageService {
   // Chuyển đổi file từ multer thành định dạng chuẩn lưu vào DB
   convertUploadedFilesToImages(files: Express.Multer.File[]) {
     return files.map((file, index) => ({

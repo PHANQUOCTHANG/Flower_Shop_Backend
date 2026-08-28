@@ -1,13 +1,7 @@
 import { Router } from "express";
-import { requireAuth } from "@/middleware/auth.middleware";
 import * as addressController from "./address.controller";
 
 const addressRouter = Router();
-
-// ─── Middleware ────────────────────────────────────────────────────────────
-
-// Tất cả routes liên quan tới address cần xác thực
-addressRouter.use(requireAuth);
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 

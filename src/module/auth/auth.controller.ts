@@ -3,9 +3,7 @@ import { getUserId } from "@/helpers/getUserId";
 import asyncHandler from "@/utils/asyncHandler";
 import { Request, Response } from "express";
 
-/**
- * Cấu hình Cookie chuẩn cho Production
- */
+// Cấu hình Cookie chuẩn cho Production
 const getCookieOptions = (expiresAt?: Date) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
@@ -17,9 +15,7 @@ const getCookieOptions = (expiresAt?: Date) => ({
   ...(expiresAt && { expires: expiresAt }),
 });
 
-/**
- * Hàm bổ trợ để gửi Token và User đồng nhất
- */
+// Hàm bổ trợ để gửi Token và User đồng nhất
 const sendAuthResponse = (
   res: Response,
   result: any,
@@ -94,9 +90,10 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
 // POST | /api/auth/logout
 export const logout = asyncHandler(async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.refreshToken;
+  const accessToken = req.headers.authorization?.split(" ")[1];
 
   if (refreshToken) {
-    await authService.logout(refreshToken);
+    await authService.logout(refreshToken, accessToken);
   }
 
   // Khi clearCookie, các option (path, domain, secure, sameSite) PHẢI KHỚP với lúc tạo

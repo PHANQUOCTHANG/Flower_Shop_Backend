@@ -1,11 +1,19 @@
-import prisma from "../../lib/prisma";
+import { PrismaClient } from "@prisma/client";
 
-export class WishlistRepository {
+export interface IWishlistRepository {
+  findByUserId(userId: string, page: number, limit: number): Promise<{ items: any[], total: number, page: number, limit: number }>;
+  findProductIds(userId: string): Promise<string[]>;
+  toggle(userId: string, productId: string): Promise<{ added: boolean }>;
+}
+
+export class WishlistRepository implements IWishlistRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
   async findByUserId(userId: string, page: number, limit: number) {
     const skip = (page - 1) * limit;
     
     const [items, total] = await Promise.all([
-      prisma.wishlist.findMany({
+      this.prisma.wishlist.findMany({
         where: { userId },
         skip,
         take: limit,
@@ -29,14 +37,14 @@ export class WishlistRepository {
         },
         orderBy: { createdAt: "desc" },
       }),
-      prisma.wishlist.count({ where: { userId } }),
+      this.prisma.wishlist.count({ where: { userId } }),
     ]);
     
     return { items, total, page, limit };
   }
 
   async findProductIds(userId: string) {
-    const items = await prisma.wishlist.findMany({
+    const items = await this.prisma.wishlist.findMany({
       where: { userId },
       select: { productId: true },
     });
@@ -44,17 +52,17 @@ export class WishlistRepository {
   }
 
   async toggle(userId: string, productId: string) {
-    const existing = await prisma.wishlist.findUnique({
+    const existing = await this.prisma.wishlist.findUnique({
       where: { userId_productId: { userId, productId } },
     });
 
     if (existing) {
-      await prisma.wishlist.delete({
+      await this.prisma.wishlist.delete({
         where: { id: existing.id },
       });
       return { added: false };
     } else {
-      await prisma.wishlist.create({
+      await this.prisma.wishlist.create({
         data: { userId, productId },
       });
       return { added: true };
