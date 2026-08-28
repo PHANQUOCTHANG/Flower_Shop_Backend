@@ -30,16 +30,10 @@ const sendAuthResponse = (
   // 1. Refresh Token (Bảo mật cao)
   res.cookie("refreshToken", result.refreshToken, cookieOptions);
 
-  // 2. User Info (Dùng cho FE hiển thị nhanh)
-  res.cookie("user", JSON.stringify(result.user), {
-    ...cookieOptions,
-    httpOnly: false, // Để JavaScript FE có thể đọc nếu cần
-  });
-
-  // 3. Role — httpOnly để Next.js middleware đọc, JS/DevTools không sửa được
+  // 2. Role — httpOnly để Next.js middleware đọc, JS/DevTools không sửa được
   res.cookie("role", (result.user?.role ?? "").toUpperCase(), {
     ...cookieOptions,
-    httpOnly: true, // KHÔNG thể đọc/sửa từ browser
+    httpOnly: true,
   });
 
   return res.status(statusCode).json({
@@ -104,8 +98,7 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
   // Khi clearCookie, các option (path, domain, secure, sameSite) PHẢI KHỚP với lúc tạo
   const clearOptions = getCookieOptions();
   res.clearCookie("refreshToken", clearOptions);
-  res.clearCookie("user", { ...clearOptions, httpOnly: false });
-  res.clearCookie("role", clearOptions); // Xóa role cookie khi logout
+  res.clearCookie("role", clearOptions);
 
   res.status(200).json({
     status: "success",
