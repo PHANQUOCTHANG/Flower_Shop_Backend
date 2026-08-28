@@ -1,5 +1,6 @@
 import { ICartRepository } from "@/module/cart/cart.repository";
 import { IProductRepository } from "@/module/product/product.repository";
+import { ICampaignRepository } from "@/module/campaign/campaign.repository";
 import AppError from "@/utils/appError";
 
 import { getCache, setCache, deleteCache } from "@/utils/cache";
@@ -23,6 +24,7 @@ export class CartService implements ICartService {
   constructor(
     private readonly cartRepo: ICartRepository,
     private readonly productRepo: IProductRepository,
+    private readonly campaignRepo: ICampaignRepository,
   ) {}
 
   // Lấy giỏ hàng người dùng
@@ -34,6 +36,25 @@ export class CartService implements ICartService {
 
     const cart = await this.cartRepo.findByUserId(userId);
     const result = !cart ? { items: [], totalAmount: 0 } : cart;
+
+    // Tính giá khuyến mãi nếu có chiến dịch đang active
+    if (result.items && result.items.length > 0) {
+      const CAMPAIGN_CACHE_KEY = `cart:active_campaign`;
+      let activeCampaign = await getCache<any>(CAMPAIGN_CACHE_KEY);
+      if (!activeCampaign) {
+        activeCampaign = await this.campaignRepo.findActiveCampaign();
+        if (activeCampaign) await setCache(CAMPAIGN_CACHE_KEY, activeCampaign, 60); // Cache 60s
+      }
+
+      if (activeCampaign && activeCampaign.items) {
+        for (const item of result.items) {
+          const saleItem = activeCampaign.items.find((i: any) => i.productId === item.product.id);
+          if (saleItem) {
+            item.product.salePrice = Number(saleItem.salePrice);
+          }
+        }
+      }
+    }
 
     // Lưu vào cache (5 phút - giỏ hàng hay thay đổi, cần dữ liệu tương đối mới)
     await setCache(cacheKey, result, this.CACHE_TTL);

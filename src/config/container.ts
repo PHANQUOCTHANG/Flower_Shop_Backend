@@ -102,11 +102,16 @@ export const authService: IAuthService = new AuthService(
   otpRepository,
 );
 
+// Campaign
+const campaignRepository: ICampaignRepository = new CampaignRepository(prisma);
+export const campaignService: ICampaignService = new CampaignService(campaignRepository);
+
 // Cart
 const cartRepository: ICartRepository = new CartRepository(prisma);
 export const cartService: ICartService = new CartService(
   cartRepository,
   productRepository,
+  campaignRepository,
 );
 
 // ActivityLog (khai báo trước Order vì OrderService phụ thuộc vào nó)
@@ -117,9 +122,6 @@ export const activityLogService: IActivityLogService = new ActivityLogService(
   activityLogRepository,
 );
 
-// Campaign
-const campaignRepository: ICampaignRepository = new CampaignRepository(prisma);
-export const campaignService: ICampaignService = new CampaignService(campaignRepository);
 
 // Order
 const orderRepository: IOrderRepository = new OrderRepository(prisma);
