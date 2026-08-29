@@ -48,7 +48,17 @@ const sendAuthResponse = (
 // POST | /api/auth/register
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
-  sendAuthResponse(res, result, 201);
+  res.status(201).json({
+    status: "success",
+    message: result.message,
+  });
+});
+
+// POST | /api/auth/register/verify
+export const verifyRegister = asyncHandler(async (req: Request, res: Response) => {
+  const { email, otp } = req.body;
+  const result = await authService.verifyRegistration(email, otp);
+  sendAuthResponse(res, result, 200);
 });
 
 // POST | /api/auth/login

@@ -4,6 +4,7 @@ import AppError from "@/utils/appError";
 import { IUserRepository } from "@/module/user/user.repository";
 import { IRefreshTokenRepository } from "@/module/auth/refreshToken/refreshToken.repository";
 import { IOtpRepository } from "@/module/auth/otp/otp.repository";
+import { IOtpService } from "@/module/auth/otp/otp.service";
 import {
   LoginRequest,
   RegisterRequest,
@@ -28,7 +29,8 @@ interface AuthResult {
 }
 
 export interface IAuthService {
-  register(dto: RegisterRequest): Promise<AuthResponseDto>;
+  register(dto: RegisterRequest): Promise<{ message: string }>;
+  verifyRegistration(email: string, otp: string): Promise<AuthResponseDto>;
   login(dto: LoginRequest): Promise<AuthResponseDto>;
   loginWithGoogle(idToken: string): Promise<AuthResponseDto>;
   refresh(refreshToken: string): Promise<AuthResponseDto>;
@@ -46,9 +48,10 @@ export class AuthService implements IAuthService {
     private readonly userRepo: IUserRepository,
     private readonly refreshRepo: IRefreshTokenRepository,
     private readonly otpRepo: IOtpRepository,
+    private readonly otpService: IOtpService,
   ) {}
 
-  async register(dto: RegisterRequest): Promise<AuthResponseDto> {
+  async register(dto: RegisterRequest): Promise<{ message: string }> {
     const existed = await this.userRepo.findByEmail(dto.email);
     if (existed) throw new AppError("Email đã tồn tại trên hệ thống", 409);
 
@@ -57,16 +60,37 @@ export class AuthService implements IAuthService {
       ...dto,
       password: hashedPassword,
       role: "CUSTOMER",
+      isActive: false, // User chưa active cho đến khi verify email
     });
 
+    // Gửi OTP xác thực
+    await this.otpService.send(user.email);
+
+    return { message: "Vui lòng kiểm tra email để nhận mã xác thực (OTP)." };
+  }
+
+  async verifyRegistration(email: string, otp: string): Promise<AuthResponseDto> {
+    // Xác thực OTP
+    await this.otpService.verifyRegister(email, otp);
+
+    // Kích hoạt user
+    let user = await this.userRepo.findByEmail(email);
+    if (!user) throw new AppError("Người dùng không tồn tại", 404);
+
+    user = await this.userRepo.updateByEmail(email, {
+      isActive: true,
+      emailVerified: true,
+    });
+
+    // Tạo token (auto login)
     const result = await this.generateAuthResult(user, false);
     return AuthResponseDto.from(
       result.user,
       result.accessToken,
       result.refreshToken,
-      result.refreshTokenExpiresAt, // <-- truyền xuống DTO
+      result.refreshTokenExpiresAt,
       result.rememberMe,
-    ); 
+    );
   }
 
   async login(dto: LoginRequest): Promise<AuthResponseDto> {

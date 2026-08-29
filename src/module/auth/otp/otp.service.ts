@@ -10,6 +10,7 @@ import { getCache, setCache, deleteCache } from "@/utils/cache";
 export interface IOtpService {
   send(email: string): Promise<OtpSentResponseDto>;
   verify(email: string, otp: string): Promise<OtpVerifiedResponseDto>;
+  verifyRegister(email: string, otp: string): Promise<void>;
 }
 
 export class OtpService implements IOtpService {
@@ -111,4 +112,30 @@ export class OtpService implements IOtpService {
 
     return new OtpVerifiedResponseDto(resetToken);
   }
+
+  // Xác thực mã OTP cho Đăng ký (không sinh resetToken)
+  async verifyRegister(email: string, otp: string): Promise<void> {
+    const cacheKey = `${this.CACHE_KEY_PREFIX}${email}`;
+    const cachedRecord = await getCache<{ otpHash: string; email: string }>(
+      cacheKey,
+    );
+
+    let record = cachedRecord;
+    if (!record) {
+      const dbRecord = await this.otpRepo.findValidByEmail(email);
+      if (!dbRecord) {
+        throw new AppError("Mã OTP đã hết hạn hoặc không tồn tại.", 400);
+      }
+      record = { otpHash: dbRecord.otpHash, email: dbRecord.email };
+    }
+
+    const isValid = await bcrypt.compare(otp, record.otpHash);
+    if (!isValid) throw new AppError("Mã OTP không chính xác.", 400);
+
+    // Xóa OTP
+    await deleteCache(cacheKey);
+    const dbRecordFull = await this.otpRepo.findValidByEmail(email);
+    if (dbRecordFull) await this.otpRepo.markVerified(dbRecordFull.id);
+  }
 }
+

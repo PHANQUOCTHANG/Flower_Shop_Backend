@@ -22,6 +22,14 @@ router.post(
   authCtrl.register,
 );
 
+// POST | /api/auth/register/verify | Xác thực OTP đăng ký
+router.post(
+  "/register/verify",
+  otpRateLimiter,
+  validationMiddleware(verifyOtpSchema),
+  authCtrl.verifyRegister,
+);
+
 // POST | /api/auth/login | Đăng nhập
 router.post("/login", authRateLimiter, validationMiddleware(loginSchema), authCtrl.login);
 
