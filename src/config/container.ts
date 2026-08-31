@@ -100,6 +100,7 @@ export const authService: IAuthService = new AuthService(
   userRepository,
   refreshTokenRepository,
   otpRepository,
+  otpService,
 );
 
 // Campaign

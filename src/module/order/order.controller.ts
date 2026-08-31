@@ -73,8 +73,14 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
           cartId: cart.id,
         },
         {
-          // Deduplicate: bỏ Date.now() để BullMQ ngăn trùng lặp job của cùng 1 user
-          jobId: `checkout:${userId}`,
+          // jobId gắn timestamp để đảm bảo mỗi lần checkout hợp lệ là 1 job mới.
+          // Double-click / trùng request trong cùng khoảnh khắc đã được chặn ở
+          // tầng Redis lock (checkout:lock:${userId}) phía trên — nếu dùng jobId
+          // tĩnh `checkout:${userId}`, một job checkout bị fail (hết 3 lần retry)
+          // sẽ tiếp tục "chiếm" đúng jobId đó tới 24h (removeOnFail age), khiến
+          // các lần checkout hợp lệ tiếp theo của user bị BullMQ coi là trùng và
+          // không được xử lý.
+          jobId: `checkout:${userId}:${Date.now()}`,
         },
       );
 

@@ -4,6 +4,8 @@ import { z } from "zod";
 const productImageSchema = z.object({
   imageUrl: z.string().url("Link ảnh không hợp lệ"),
   publicId: z.string().min(1).optional().nullable(),
+  width: z.number().int().nullable().optional(),
+  height: z.number().int().nullable().optional(),
   isPrimary: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
 });
@@ -27,6 +29,8 @@ const productBase = z.object({
   sku: z.string().max(100).nullable().optional(),
   thumbnailUrl: z.string().url().nullable().optional(),
   thumbnailPublicId: z.string().max(255).nullable().optional(),
+  thumbnailWidth: z.number().int().nullable().optional(),
+  thumbnailHeight: z.number().int().nullable().optional(),
   status: z.enum(["active", "hidden", "draft"]).default("active"),
   // Chuẩn hóa categoryIds về mảng
   categoryIds: z
@@ -49,6 +53,19 @@ export const UpdateProductSchema = productBase.partial().extend({
       z.array(z.string()),
     )
     .optional(),
+  // Thứ tự cuối cùng của toàn bộ ảnh gallery (cũ lẫn mới) sau khi admin kéo-thả
+  // sắp xếp. Mỗi phần tử là id thật của ProductImage (ảnh cũ giữ lại) hoặc
+  // "new:<index>" — index tính theo thứ tự file trong field "images" của
+  // multipart form (ảnh mới upload). Token nào không xác định được sẽ bị bỏ
+  // qua; ảnh nào không có token nào ứng với nó sẽ tự nối vào cuối.
+  imageOrder: z
+    .preprocess(
+      (val) => (val == null ? [] : Array.isArray(val) ? val : [val]),
+      z.array(z.string()),
+    )
+    .optional(),
+  // Token (cùng định dạng với imageOrder) của ảnh được chọn làm ảnh đại diện.
+  primaryImageId: z.string().nullable().optional(),
 });
 
 export const ProductIdParamSchema = z.object({

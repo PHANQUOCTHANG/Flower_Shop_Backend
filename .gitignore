@@ -56,3 +56,6 @@ dump.rdb
 !logs/.gitkeep
 
 /src/generated/prisma
+
+# Báo cáo audit ảnh sản phẩm (chứa dữ liệu sản phẩm, không cần commit)
+scripts/output/

@@ -12,6 +12,8 @@ export class ImageService implements IImageService {
     return files.map((file, index) => ({
       imageUrl: file.path,
       publicId: file.filename,
+      width: file.width ?? null,
+      height: file.height ?? null,
       isPrimary: index === 0,
       sortOrder: index,
     }));
@@ -35,6 +37,8 @@ export class ImageService implements IImageService {
     return results.map((item, index) => ({
       imageUrl: item.secure_url,
       publicId: item.public_id,
+      width: item.width ?? null,
+      height: item.height ?? null,
       isPrimary: index === 0,
       sortOrder: index,
     }));

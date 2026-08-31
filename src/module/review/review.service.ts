@@ -78,6 +78,20 @@ export class ReviewService implements IReviewService {
       );
     }
 
+    // SECURITY: orderId do client gửi lên — phải xác thực nó thực sự thuộc về
+    // user này và có chứa đúng sản phẩm đang review, tránh IDOR (đánh dấu isReview
+    // trên OrderItem của người khác bằng cách đoán/gửi orderId tuỳ ý).
+    if (input.orderId) {
+      // findById ném lỗi 404 nếu order không tồn tại hoặc không thuộc về userId
+      const order = await this.orderService.findById(input.orderId, userId);
+      const belongsToOrder = order.items.some(
+        (item) => item.productId === input.productId,
+      );
+      if (!belongsToOrder) {
+        throw new AppError("Đơn hàng không chứa sản phẩm này", 400);
+      }
+    }
+
     // Lưu Review (Prisma nested write tạo media cùng lúc)
     const review = await this.reviewRepo.create(userId, input);
 

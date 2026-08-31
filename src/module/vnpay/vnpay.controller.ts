@@ -19,7 +19,7 @@ export const vnpayReturn = asyncHandler(async (req: Request, res: Response) => {
   if (result.isValid && result.responseCode === "00") {
     // Thanh toán thành công → xác nhận đơn hàng (đề phòng IPN chưa tới)
     try {
-      await orderService.confirmVnpayPayment(result.orderId);
+      await orderService.confirmVnpayPayment(result.orderId, result.amount);
       logger.info(`[VNPay Return] Thanh toán thành công — orderId: ${result.orderId}`);
     } catch (error: any) {
       // Nếu đã confirm rồi (IPN đến trước) thì bỏ qua
@@ -50,7 +50,7 @@ export const vnpayIpn = asyncHandler(async (req: Request, res: Response) => {
   if (result.responseCode === "00") {
     // Thanh toán thành công → xác nhận đơn hàng hoàn tất
     try {
-      await orderService.confirmVnpayPayment(result.orderId);
+      await orderService.confirmVnpayPayment(result.orderId, result.amount);
       logger.info(`[VNPay IPN] Xác nhận thanh toán thành công — orderId: ${result.orderId}, transactionNo: ${result.transactionNo}`);
       return res.status(200).json({ RspCode: "00", Message: "Success" });
     } catch (error: any) {

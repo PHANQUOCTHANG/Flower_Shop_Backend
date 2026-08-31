@@ -21,12 +21,15 @@ export class OrderResponseDto {
   constructor(order: any) {
     this.id = order.id;
     this.totalPrice = Number(order.totalPrice);
-    this.status = order.status;
+    // Prisma enum trả về UPPERCASE ở tầng JS (VD: "PENDING"), nhưng toàn bộ
+    // frontend (so sánh string, ORDER_STATUS_MAP, v.v.) đang quy ước lowercase
+    // giống giá trị DB (@map) — chuẩn hoá tại DTO để giữ nguyên hợp đồng API cũ.
+    this.status = order.status?.toLowerCase?.() ?? order.status;
     this.name = order.name;
     this.shippingAddress = order.shippingAddress;
     this.shippingPhone = order.shippingPhone;
     this.paymentMethod = order.paymentMethod;
-    this.paymentStatus = order.paymentStatus;
+    this.paymentStatus = order.paymentStatus?.toLowerCase?.() ?? order.paymentStatus;
     this.note = order.note;
     this.createdAt = order.createdAt.toISOString();
     this.updatedAt = order.updatedAt.toISOString();

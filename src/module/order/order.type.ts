@@ -1,18 +1,20 @@
 import { BaseQuery } from "@/utils/query";
 import { normalizeQuery } from "@/utils/query";
 
+import { OrderStatus, PaymentStatus } from "@prisma/client";
+
 // Kiểu query cho filter/sort đơn hàng
 export interface OrderQuery extends BaseQuery {
-  status?: "pending" | "processing" | "completed" | "cancelled";
-  paymentStatus?: "paid" | "unpaid";
+  status?: OrderStatus;
+  paymentStatus?: PaymentStatus;
   dateFrom?: string;
   dateTo?: string;
 }
 
 export const normalizeQueryOrder = (query: any): OrderQuery => ({
   ...normalizeQuery(query),
-  status: query.status?.trim() || undefined,
-  paymentStatus: query.paymentStatus?.trim() || undefined,
+  status: (query.status?.trim().toUpperCase() as OrderStatus) || undefined,
+  paymentStatus: (query.paymentStatus?.trim().toUpperCase() as PaymentStatus) || undefined,
   dateFrom: query.dateFrom?.trim() || undefined,
   dateTo: query.dateTo?.trim() || undefined,
 });

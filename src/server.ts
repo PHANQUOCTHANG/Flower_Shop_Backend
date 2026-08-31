@@ -7,6 +7,8 @@ import { globalErrorHandler } from "@/middleware/errorHandler";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { connectRedis } from "@/config/redis";
+import redisClient from "@/config/redis";
+import prisma from "@/lib/prisma";
 import "@/config/cloudinary";
 
 import http from "http";
@@ -39,8 +41,33 @@ app.use(cookieParser());
 setupSwagger(app);
 
 // Routes
-app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok' });
+app.get('/health', async (_req, res) => {
+  const health = {
+    uptime: process.uptime(),
+    message: 'OK',
+    timestamp: Date.now(),
+    dependencies: {
+      database: 'down',
+      redis: 'down'
+    }
+  };
+
+  try {
+    // Check Database
+    await prisma.$queryRaw`SELECT 1`;
+    health.dependencies.database = 'up';
+
+    // Check Redis
+    if (redisClient.isOpen) {
+      await redisClient.ping();
+      health.dependencies.redis = 'up';
+    }
+    
+    res.status(200).json(health);
+  } catch (error) {
+    health.message = 'Dependencies failure';
+    res.status(503).json(health);
+  }
 });
 
 clientRoute(app);

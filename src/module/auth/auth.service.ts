@@ -53,15 +53,32 @@ export class AuthService implements IAuthService {
 
   async register(dto: RegisterRequest): Promise<{ message: string }> {
     const existed = await this.userRepo.findByEmail(dto.email);
-    if (existed) throw new AppError("Email đã tồn tại trên hệ thống", 409);
+
+    // Email đã tồn tại VÀ đã kích hoạt (verify OTP thành công) → thực sự trùng
+    if (existed && existed.isActive) {
+      throw new AppError("Email đã tồn tại trên hệ thống", 409);
+    }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const user = await this.userRepo.create({
-      ...dto,
-      password: hashedPassword,
-      role: "CUSTOMER",
-      isActive: false, // User chưa active cho đến khi verify email
-    });
+
+    let user;
+    if (existed) {
+      // Email đã đăng ký trước đó nhưng CHƯA verify OTP (bỏ dở, OTP hết hạn...)
+      // → không chặn, cho phép đăng ký lại: ghi đè thông tin + gửi OTP mới,
+      //   thay vì khoá email này vĩnh viễn.
+      user = await this.userRepo.updateByEmail(dto.email, {
+        fullName: dto.fullName,
+        password: hashedPassword,
+        phone: dto.phone,
+      });
+    } else {
+      user = await this.userRepo.create({
+        ...dto,
+        password: hashedPassword,
+        role: "CUSTOMER",
+        isActive: false, // User chưa active cho đến khi verify email
+      });
+    }
 
     // Gửi OTP xác thực
     await this.otpService.send(user.email);

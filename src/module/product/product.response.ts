@@ -16,6 +16,8 @@ export class ProductResponseDto {
   sku: string | null;
   thumbnailUrl: string | null;
   thumbnailPublicId: string | null;
+  thumbnailWidth: number | null;
+  thumbnailHeight: number | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -44,6 +46,8 @@ export class ProductResponseDto {
     this.sku = product.sku;
     this.thumbnailUrl = product.thumbnailUrl;
     this.thumbnailPublicId = product.thumbnailPublicId || null;
+    this.thumbnailWidth = product.thumbnailWidth ?? null;
+    this.thumbnailHeight = product.thumbnailHeight ?? null;
     this.status = product.status;
     this.createdAt = product.createdAt.toISOString();
     this.updatedAt = product.updatedAt.toISOString();
@@ -56,6 +60,9 @@ export class ProductResponseDto {
         url: img.imageUrl,
         isPrimary: img.isPrimary,
         publicId: img.publicId,
+        width: img.width ?? null,
+        height: img.height ?? null,
+        sortOrder: img.sortOrder,
       })) || [];
 
     // Map danh mục liên quan

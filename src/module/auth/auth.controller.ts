@@ -21,8 +21,7 @@ const sendAuthResponse = (
   result: any,
   statusCode: number = 200,
 ) => {
-  console.log("Remember Me (Server):", result.rememberMe);
-  const expiresAt = result.rememberMe 
+  const expiresAt = result.rememberMe
     ? result.refreshTokenExpiresAt
     : undefined;
   const cookieOptions = getCookieOptions(expiresAt);

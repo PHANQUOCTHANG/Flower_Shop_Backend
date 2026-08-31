@@ -4,6 +4,7 @@ import { ICampaignRepository } from "../campaign/campaign.repository";
 import { ICartRepository } from "../cart/cart.repository";
 import { OrderResponseDto } from "./order.response";
 import { CheckoutDto } from "@/module/order/order.request";
+import { OrderStatus, PaymentStatus } from "@prisma/client";
 import {
   getCache,
   setCache,
@@ -20,25 +21,28 @@ import { vnpayCleanupQueue } from "@/config/queue";
 
 // ─── State Machine: Các transition trạng thái hợp lệ ────────────────────────
 // Key: trạng thái hiện tại → Value: danh sách trạng thái có thể chuyển sang
+// LƯU Ý: OrderStatus là Prisma enum — giá trị ở tầng JS luôn UPPERCASE
+// (chỉ giá trị lưu trong DB mới lowercase qua @map), nên các key/value ở đây
+// phải khớp OrderStatus.* chứ không phải chuỗi lowercase.
+// Thanh toán VNPay (PENDING_PAYMENT → PENDING) được xác nhận qua confirmVnpayPayment(),
+// không đi qua state machine này.
 const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
-  pending:         ["processing", "cancelled"],   // Chờ xử lý → Đang xử lý | Hủy
-  pending_payment: ["paid", "cancelled"],          // Chờ TT VNPay → Đã TT | Hủy
-  paid:            ["processing", "cancelled"],   // Đã TT → Đang xử lý | Hủy
-  processing:      ["shipping", "cancelled"],     // Đang xử lý → Đang giao | Hủy
-  shipping:        ["delivered", "cancelled"],    // Đang giao → Đã giao | Hủy
-  delivered:       ["completed"],                 // Đã giao → Hoàn tất (xác nhận nhận hàng)
-  completed:       [],                             // Hoàn tất — không thể thay đổi
-  cancelled:       [],                             // Đã hủy — không thể thay đổi
+  [OrderStatus.PENDING_PAYMENT]: [OrderStatus.CANCELLED],                     // Chờ TT VNPay → Hủy (hết hạn/khách hủy)
+  [OrderStatus.PENDING]:         [OrderStatus.PROCESSING, OrderStatus.CANCELLED], // Chờ xử lý → Đang xử lý | Hủy
+  [OrderStatus.PROCESSING]:      [OrderStatus.SHIPPING, OrderStatus.CANCELLED],   // Đang xử lý → Đang giao | Hủy
+  [OrderStatus.SHIPPING]:        [OrderStatus.COMPLETED, OrderStatus.CANCELLED],  // Đang giao → Hoàn tất | Hủy
+  [OrderStatus.COMPLETED]:       [],                                           // Hoàn tất — không thể thay đổi
+  [OrderStatus.CANCELLED]:       [],                                           // Đã hủy — không thể thay đổi
 };
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
   createPendingVnpayOrder(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
-  confirmVnpayPayment(orderId: string): Promise<OrderResponseDto>;
+  confirmVnpayPayment(orderId: string, paidAmount?: number): Promise<OrderResponseDto>;
   findAll(query: OrderQuery): Promise<any>;
   findByUserId(userId: string, query: OrderQuery): Promise<any>;
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
-  updateStatus(orderId: string, status: string): Promise<OrderResponseDto>;
+  updateStatus(orderId: string, status: OrderStatus): Promise<OrderResponseDto>;
   cancelOrder(orderId: string, userId: string): Promise<OrderResponseDto>;
   cancelExpiredVnpayOrder(orderId: string): Promise<void>;
   updateOrderItemReviewStatus(
@@ -70,6 +74,15 @@ export class OrderService implements IOrderService {
 
   // Quy trình checkout: Kiểm tra giỏ -> Khóa giá -> Tạo đơn -> Làm trống giỏ
   async checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
+    // 1. Kiểm tra xem có đơn hàng VNPay nào đang chờ không (Fix bug trùng đơn)
+    const pendingVnpayOrder = await this.orderRepo.findFirst({
+      where: { userId, status: OrderStatus.PENDING_PAYMENT },
+    });
+    if (pendingVnpayOrder) {
+      // Tự động hủy đơn hàng VNPay cũ đang chờ thanh toán
+      await this.orderRepo.updateStatus(pendingVnpayOrder.id, OrderStatus.CANCELLED);
+    }
+
     // Lấy giỏ hàng của khách
     const cart = await this.cartRepo.findByUserId(userId);
     if (!cart || cart.items.length === 0) {
@@ -251,7 +264,7 @@ export class OrderService implements IOrderService {
   // Cập nhật trạng thái đơn hàng (admin)
   async updateStatus(
     orderId: string,
-    status: string,
+    status: OrderStatus,
   ): Promise<OrderResponseDto> {
     // Lấy order hiện tại để kiểm tra trạng thái
     const currentOrder = await this.orderRepo.findById(orderId);
@@ -289,7 +302,7 @@ export class OrderService implements IOrderService {
     // Bắn socket realtime cho user
     getIO().to(`user:${order.userId}`).emit("order:status_updated", {
       orderId: order.id,
-      status: order.status,
+      status: response.status,
     });
 
     return response;
@@ -305,16 +318,16 @@ export class OrderService implements IOrderService {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
-    if (order.status !== "pending") {
-      throw new AppError(
-        "Chỉ có thể hủy đơn hàng khi ở trạng thái chờ xử lý",
-        400,
-      );
+    // VNPay chỉ được hủy nếu đang pending_payment, đơn khác phải pending
+    if (order.status === OrderStatus.PENDING_PAYMENT) {
+      // Hợp lệ, tiếp tục hủy
+    } else if (order.status !== OrderStatus.PENDING) {
+      throw new AppError("Không thể hủy đơn hàng này", 400);
     }
 
     const updatedOrder = await this.orderRepo.updateStatus(
       orderId,
-      "cancelled",
+      OrderStatus.CANCELLED,
     );
     if (!updatedOrder) {
       throw new AppError("Không thể hủy đơn hàng", 500);
@@ -341,7 +354,7 @@ export class OrderService implements IOrderService {
     // Bắn event cập nhật realtime cho chính user đó (để update danh sách ở tab khác nếu có)
     getIO().to(`user:${userId}`).emit("order:status_updated", {
       orderId: updatedOrder.id,
-      status: updatedOrder.status,
+      status: response.status,
     });
 
     // Xóa cache
@@ -403,6 +416,15 @@ export class OrderService implements IOrderService {
   // Chỉ tạo order với status="pending_payment"
   // KHÔNG xóa giỏ hàng, KHÔNG gửi email, KHÔNG thông báo admin
   async createPendingVnpayOrder(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
+    // Kiểm tra xem có đơn hàng VNPay nào đang chờ không
+    const existingPendingOrder = await this.orderRepo.findFirst({
+      where: { userId, status: OrderStatus.PENDING_PAYMENT },
+    });
+    if (existingPendingOrder) {
+      // Tự động hủy đơn hàng VNPay cũ
+      await this.orderRepo.updateStatus(existingPendingOrder.id, OrderStatus.CANCELLED);
+    }
+
     const cart = await this.cartRepo.findByUserId(userId);
     if (!cart || cart.items.length === 0) {
       throw new AppError("Giỏ hàng của bạn đang trống", 400);
@@ -448,7 +470,7 @@ export class OrderService implements IOrderService {
       shippingAddress: dto.shippingAddress,
       shippingPhone: dto.shippingPhone,
       paymentMethod: dto.paymentMethod,
-      status: "pending_payment",
+      status: OrderStatus.PENDING_PAYMENT,
       items: orderItems,
     });
 
@@ -474,7 +496,7 @@ export class OrderService implements IOrderService {
   // ─── VNPay: Xác nhận thanh toán thành công ──────────────────────────────────
   // Gọi khi IPN callback xác nhận thanh toán OK
   // Lúc này mới: cập nhật status, xóa giỏ hàng, gửi email, thông báo admin
-  async confirmVnpayPayment(orderId: string): Promise<OrderResponseDto> {
+  async confirmVnpayPayment(orderId: string, paidAmount?: number): Promise<OrderResponseDto> {
     // 1. Lấy order từ DB
     const order = await this.orderRepo.findById(orderId);
     if (!order) {
@@ -482,13 +504,33 @@ export class OrderService implements IOrderService {
     }
 
     // Tránh xử lý trùng (IPN có thể gọi nhiều lần)
-    if (order.paymentStatus === "paid") {
+    if (order.paymentStatus === PaymentStatus.PAID) {
       return OrderResponseDto.from(order);
     }
 
+    // Defense-in-depth: số tiền VNPay báo về (đã ký HMAC, khó giả mạo) phải khớp
+    // với giá trị đơn hàng lưu trong DB — phòng trường hợp orderId bị đoán/dò và
+    // logic tạo URL thanh toán ở nơi khác vô tình gửi sai amount.
+    if (paidAmount !== undefined && Math.round(paidAmount) !== Math.round(Number(order.totalPrice))) {
+      throw new AppError(
+        `Số tiền thanh toán VNPay (${paidAmount}) không khớp với giá trị đơn hàng (${order.totalPrice})`,
+        400,
+      );
+    }
+
+    // Chặn hồi sinh đơn đã bị hủy: nếu user mở 2 lần checkout VNPay,
+    // đơn cũ đang PENDING_PAYMENT sẽ tự bị hủy (xem checkout()/createPendingVnpayOrder()).
+    // Nếu IPN của đơn cũ đó vẫn tới sau khi đã bị hủy, không được phép "hồi sinh" nó.
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      throw new AppError(
+        `Đơn hàng #${order.id} không còn ở trạng thái chờ thanh toán (hiện tại: ${order.status}), bỏ qua xác nhận VNPay`,
+        409,
+      );
+    }
+
     // 2. Cập nhật paymentStatus = "paid" và status = "pending" (chuyển sang luồng bình thường)
-    await this.orderRepo.updatePaymentStatus(orderId, "paid");
-    const updatedOrder = await this.orderRepo.updateStatus(orderId, "pending");
+    await this.orderRepo.updatePaymentStatus(orderId, PaymentStatus.PAID);
+    const updatedOrder = await this.orderRepo.updateStatus(orderId, OrderStatus.PENDING);
     if (!updatedOrder) {
       throw new AppError("Không thể cập nhật đơn hàng", 500);
     }
@@ -571,9 +613,10 @@ export class OrderService implements IOrderService {
   async cancelExpiredVnpayOrder(orderId: string): Promise<void> {
     const order = await this.orderRepo.findById(orderId);
     // Đơn đã thanh toán hoặc không tồn tại → bỏ qua, không làm gì
-    if (!order || order.status !== "pending_payment") return;
+    if (!order || order.status !== OrderStatus.PENDING_PAYMENT) return;
 
-    const updatedOrder = await this.orderRepo.updateStatus(orderId, "cancelled");
+    // Hủy đơn do quá hạn VNPay (không cần cập nhật kho vì createPendingVnpayOrder chưa trừ kho)
+    const updatedOrder = await this.orderRepo.updateStatus(orderId, OrderStatus.CANCELLED);
     if (!updatedOrder) return;
 
     // Ghi log để Admin biết

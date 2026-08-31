@@ -35,8 +35,6 @@ export const getProductReviews = asyncHandler(
     const { productId } = req.params as { productId: string };
     const result = await reviewService.getProductReviews(productId, req.query);
 
-    console.log("Reviews result:", result); // Debug log
-
     return res.status(200).json(ApiResponse.paginate(result));
   },
 );
@@ -48,7 +46,6 @@ export const getReviewsByProductSlug = asyncHandler(
     const { slug } = req.params as { slug: string };
     const result = await reviewService.getProductReviewsBySlug(slug, req.query);
 
-    console.log("Reviews result:", result); // Debug log
     return res.status(200).json(ApiResponse.paginate(result));
   },
 );

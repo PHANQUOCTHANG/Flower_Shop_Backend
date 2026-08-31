@@ -1,4 +1,4 @@
-import { PrismaClient, Review } from "@prisma/client";
+import { PrismaClient, Review, OrderStatus } from "@prisma/client";
 
 export interface IReviewRepository {
   create(userId: string, data: any): Promise<Review>;
@@ -124,7 +124,7 @@ export class ReviewRepository implements IReviewRepository {
     const order = await this.prisma.order.findFirst({
       where: {
         userId,
-        status: "completed",
+        status: OrderStatus.COMPLETED,
         items: { some: { productId } },
       },
     });

@@ -129,7 +129,7 @@ export class VnpayService implements IVnpayService {
     const hmac = crypto.createHmac("sha512", this.hashSecret);
     const signed = hmac.update(Buffer.from(signData, "utf-8")).digest("hex");
 
-    const isValid = secureHash === signed;
+    const isValid = this.safeCompare(secureHash, signed);
 
     return {
       isValid,
@@ -138,6 +138,18 @@ export class VnpayService implements IVnpayService {
       transactionNo: query["vnp_TransactionNo"] || "",
       amount: Number(query["vnp_Amount"] || 0) / 100, // Chia lại 100
     };
+  }
+
+  /**
+   * So sánh 2 chuỗi hash theo constant-time để tránh timing attack
+   * (crypto.timingSafeEqual yêu cầu 2 buffer cùng độ dài, nên phải guard trước)
+   */
+  private safeCompare(a?: string, b?: string): boolean {
+    if (!a || !b) return false;
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
   }
 
   /**

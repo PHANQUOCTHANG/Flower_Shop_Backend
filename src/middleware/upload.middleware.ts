@@ -4,6 +4,10 @@ import { StorageEngine } from "multer";
 import { Request } from "express";
 import AppError from "@/utils/appError";
 
+// Kích thước tối thiểu chấp nhận cho ảnh sản phẩm — ảnh nhỏ hơn sẽ luôn mờ khi
+// hiển thị ở trang chi tiết (ảnh lớn, có thể tới 100vw trên màn hình DPI cao).
+const MIN_PRODUCT_IMAGE_DIMENSION = 800;
+
 // Custom storage engine: upload stream trực tiếp lên Cloudinary
 class CloudinaryStorage implements StorageEngine {
   _handleFile(
@@ -15,8 +19,11 @@ class CloudinaryStorage implements StorageEngine {
       {
         folder: "products",
         allowed_formats: ["jpg", "jpeg", "png", "webp"],
+        // Trần an toàn (không phá huỷ chi tiết ảnh thực tế) — đủ lớn để trang
+        // chi tiết vẫn nét ở 100vw trên màn hình 2-3x DPI. quality auto:best vì
+        // đây là ảnh hero của trang TMĐT, ưu tiên độ nét hơn một chút dung lượng.
         transformation: [
-          { width: 1200, height: 1200, crop: "limit", quality: "auto:good" },
+          { width: 3000, height: 3000, crop: "limit", quality: "auto:best" },
         ],
       },
       (error, result) => {
@@ -24,9 +31,26 @@ class CloudinaryStorage implements StorageEngine {
           return cb(error ?? new Error("Upload thất bại"));
         }
 
+        // Chặn ảnh gốc quá nhỏ ngay từ lúc upload — ảnh nhỏ sẽ luôn bị phóng to
+        // (mờ) khi hiển thị to ở trang chi tiết, không transform nào cứu được.
+        if (
+          (result.width ?? 0) < MIN_PRODUCT_IMAGE_DIMENSION &&
+          (result.height ?? 0) < MIN_PRODUCT_IMAGE_DIMENSION
+        ) {
+          cloudinary.uploader.destroy(result.public_id, () => {});
+          return cb(
+            new AppError(
+              `Ảnh quá nhỏ (${result.width}x${result.height}px). Vui lòng chọn ảnh có độ phân giải tối thiểu ${MIN_PRODUCT_IMAGE_DIMENSION}x${MIN_PRODUCT_IMAGE_DIMENSION}px.`,
+              400,
+            ),
+          );
+        }
+
         cb(undefined, {
           path: result.secure_url,
           filename: result.public_id,
+          width: result.width,
+          height: result.height,
         });
       },
     );

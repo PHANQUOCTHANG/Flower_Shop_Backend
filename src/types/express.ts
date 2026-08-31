@@ -16,6 +16,14 @@ declare global {
       file?: Express.Multer.File;
       files?: Express.Multer.File[];
     }
+
+    namespace Multer {
+      interface File {
+        // Kích thước thật của ảnh trả về từ Cloudinary sau upload (CloudinaryStorage gắn vào)
+        width?: number;
+        height?: number;
+      }
+    }
   }
 }
 

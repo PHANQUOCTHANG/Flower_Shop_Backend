@@ -21,6 +21,21 @@ enum AuthProvider {
   FACEBOOK
 }
 
+enum OrderStatus {
+  PENDING         @map("pending")
+  PROCESSING      @map("processing")
+  SHIPPING        @map("shipping")
+  COMPLETED       @map("completed")
+  CANCELLED       @map("cancelled")
+  PENDING_PAYMENT @map("pending_payment")
+}
+
+enum PaymentStatus {
+  UNPAID   @map("unpaid")
+  PAID     @map("paid")
+  REFUNDED @map("refunded")
+}
+
 // --- MODELS ---
 
 model User {
@@ -35,11 +50,11 @@ model User {
   avatar        String?      @db.Text
   isActive      Boolean      @default(true) @map("is_active")
   emailVerified Boolean      @default(false) @map("email_verified")
-  
-  lastLogin     DateTime?    @map("last_login") @db.Timestamptz
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt     DateTime?    @map("deleted_at") @db.Timestamptz
+
+  lastLogin DateTime? @map("last_login") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
 
   // Quan hệ
   refreshTokens RefreshToken[]
@@ -47,20 +62,19 @@ model User {
   orders        Order[]
   addresses     Address[]
   reviews       Review[]
-  chats         Chat[]       @relation("UserChats")
-  adminChats    Chat[]       @relation("AdminChats")
+  chats         Chat[]         @relation("UserChats")
+  adminChats    Chat[]         @relation("AdminChats")
   messages      Message[]
   wishlists     Wishlist[]
 
-  @@map("users")
   // --- Index hiện tại của bạn ---
   @@index([deletedAt])
   @@index([provider, providerId])
-
   // --- Index khuyên dùng thêm ---
-  @@index([phone])             // Tìm kiếm khách hàng qua SĐT
-  @@index([fullName])          // Search tên ở trang Admin
-  @@index([role, isActive])    // Lọc danh sách User theo quyền/trạng thái
+  @@index([phone]) // Tìm kiếm khách hàng qua SĐT
+  @@index([fullName]) // Search tên ở trang Admin
+  @@index([role, isActive]) // Lọc danh sách User theo quyền/trạng thái
+  @@map("users")
 }
 
 model RefreshToken {
@@ -74,8 +88,8 @@ model RefreshToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("refresh_tokens")
   @@index([userId])
+  @@map("refresh_tokens")
 }
 
 model Otp {
@@ -87,52 +101,54 @@ model Otp {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  @@map("otps")
   @@index([email])
+  @@map("otps")
 }
 
 model Category {
-  id              String            @id @default(uuid())
-  name            String            @db.VarChar(150)
-  slug            String            @unique @db.VarChar(150)
-  description     String?           @db.Text
-  parentId        String?           @map("parent_id")
-  thumbnailUrl    String?           @map("thumbnail_url") @db.Text
-  sortOrder       Int               @default(0) @map("sort_order")
-  status          String            @default("active") @db.VarChar(20)
-  metaTitle       String?           @map("meta_title") @db.VarChar(255)
-  metaDescription String?           @map("meta_description") @db.Text
-  
-  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt       DateTime?         @map("deleted_at") @db.Timestamptz
+  id              String  @id @default(uuid())
+  name            String  @db.VarChar(150)
+  slug            String  @unique @db.VarChar(150)
+  description     String? @db.Text
+  parentId        String? @map("parent_id")
+  thumbnailUrl    String? @map("thumbnail_url") @db.Text
+  sortOrder       Int     @default(0) @map("sort_order")
+  status          String  @default("active") @db.VarChar(20)
+  metaTitle       String? @map("meta_title") @db.VarChar(255)
+  metaDescription String? @map("meta_description") @db.Text
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
 
   parent   Category?         @relation("CategoryToCategory", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[]        @relation("CategoryToCategory")
   products ProductCategory[]
 
-  @@map("categories")
   @@index([slug])
   @@index([parentId])
   @@index([status])
+  @@map("categories")
 }
 
 model Product {
-  id                String    @id @default(uuid())
-  name              String    @db.VarChar(255)
-  slug              String    @unique @db.VarChar(255)
-  shortDescription  String?   @map("short_description") @db.Text
-  description       String?   @db.Text
-  price             Decimal   @db.Decimal(12, 2)
-  comparePrice      Decimal?  @map("compare_price") @db.Decimal(12, 2)
-  sku               String?   @unique @db.VarChar(100)
-  thumbnailUrl      String?   @map("thumbnail_url") @db.Text
-  thumbnailPublicId String?   @map("thumbnail_public_id") @db.VarChar(255)
-  status            String    @default("active") @db.VarChar(20)
-  
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz
+  id                String   @id @default(uuid())
+  name              String   @db.VarChar(255)
+  slug              String   @unique @db.VarChar(255)
+  shortDescription  String?  @map("short_description") @db.Text
+  description       String?  @db.Text
+  price             Decimal  @db.Decimal(12, 2)
+  comparePrice      Decimal? @map("compare_price") @db.Decimal(12, 2)
+  sku               String?  @unique @db.VarChar(100)
+  thumbnailUrl      String?  @map("thumbnail_url") @db.Text
+  thumbnailPublicId String?  @map("thumbnail_public_id") @db.VarChar(255)
+  thumbnailWidth    Int?     @map("thumbnail_width")
+  thumbnailHeight   Int?     @map("thumbnail_height")
+  status            String   @default("active") @db.VarChar(20)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
 
   // Quan hệ
   categories ProductCategory[]
@@ -143,12 +159,12 @@ model Product {
   saleItems  SaleCampaignItem[]
   wishlists  Wishlist[]
 
-  @@map("products")
   @@index([sku])
   @@index([slug])
   @@index([status])
   @@index([price])
   @@index([createdAt])
+  @@map("products")
 }
 
 model ProductCategory {
@@ -167,16 +183,17 @@ model ProductImage {
   productId String   @map("product_id")
   imageUrl  String   @map("image_url") @db.Text
   publicId  String   @map("public_id") @db.VarChar(255)
+  width     Int?
+  height    Int?
   isPrimary Boolean  @default(false) @map("is_primary")
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@map("product_images")
   @@index([productId])
+  @@map("product_images")
 }
-
 
 model Cart {
   id        String   @id @default(uuid())
@@ -201,35 +218,35 @@ model CartItem {
   cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@map("cart_items")
   @@unique([cartId, productId]) // Ngăn duplicate item cùng product trong cùng cart (DB-level)
   @@index([cartId])
+  @@map("cart_items")
 }
 
 model Order {
-  id              String   @id @default(uuid())
-  userId          String   @map("user_id")
-  totalPrice      Decimal  @map("total_price") @db.Decimal(12, 2)
-  status          String   @default("pending") @db.VarChar(20)
-  
-  name            String?  @map("name") @db.Text
-  shippingAddress String?  @map("shipping_address") @db.Text
-  shippingPhone   String?  @map("shipping_phone") @db.VarChar(20)
-  paymentMethod   String?  @map("payment_method") @db.VarChar(50)
-  paymentStatus   String   @default("unpaid") @map("payment_status") @db.VarChar(20)
-  note            String?  @map("note") @db.Text
+  id         String      @id @default(uuid())
+  userId     String      @map("user_id")
+  totalPrice Decimal     @map("total_price") @db.Decimal(12, 2)
+  status     OrderStatus @default(PENDING)
 
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  name            String?       @map("name") @db.Text
+  shippingAddress String?       @map("shipping_address") @db.Text
+  shippingPhone   String?       @map("shipping_phone") @db.VarChar(20)
+  paymentMethod   String?       @map("payment_method") @db.VarChar(50)
+  paymentStatus   PaymentStatus @default(UNPAID) @map("payment_status")
+  note            String?       @map("note") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   user  User        @relation(fields: [userId], references: [id])
   items OrderItem[]
 
-  @@map("orders")
   @@index([userId])
   @@index([status])
   @@index([paymentStatus])
   @@index([createdAt])
+  @@map("orders")
 }
 
 model OrderItem {
@@ -244,35 +261,35 @@ model OrderItem {
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([orderId, productId]) 
-  @@map("order_items")
+  @@unique([orderId, productId])
   @@index([orderId])
   @@index([productId])
+  @@map("order_items")
 }
 
 model Review {
-  id        String   @id @default(uuid())
-  rating    Int      @default(5)
-  content   String?  @db.Text
-  isVisible Boolean  @default(true) @map("is_visible")
-  
-  userId    String   @map("user_id")
-  productId String   @map("product_id")
-  orderId   String?  @map("order_id")
+  id        String  @id @default(uuid())
+  rating    Int     @default(5)
+  content   String? @db.Text
+  isVisible Boolean @default(true) @map("is_visible")
 
-  user    User    @relation(fields: [userId], references: [id])
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String  @map("user_id")
+  productId String  @map("product_id")
+  orderId   String? @map("order_id")
+
+  user    User          @relation(fields: [userId], references: [id])
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   media   ReviewMedia[]
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz
 
-  @@map("reviews")
   @@index([productId])
   @@index([userId])
   @@index([rating])
   @@index([userId, productId]) // Tối ưu query kiểm tra duplicate review
+  @@map("reviews")
 }
 
 model ReviewMedia {
@@ -284,27 +301,27 @@ model ReviewMedia {
 
   review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
-  @@map("review_media")
   @@index([reviewId])
+  @@map("review_media")
 }
 
 model Chat {
-  id             String    @id @default(uuid()) @db.Uuid
-  userId         String    @map("user_id")
-  adminId        String?   @map("admin_id")
-  status         String    @default("open") @db.VarChar(20)
-  lastMessageAt  DateTime? @map("last_message_at") @db.Timestamptz
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id")
+  adminId       String?   @map("admin_id")
+  status        String    @default("open") @db.VarChar(20)
+  lastMessageAt DateTime? @map("last_message_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   user     User      @relation("UserChats", fields: [userId], references: [id])
   admin    User?     @relation("AdminChats", fields: [adminId], references: [id])
   messages Message[]
 
-  @@map("chats")
   @@index([userId])
   @@index([status])
   @@index([updatedAt])
+  @@map("chats")
 }
 
 model Message {
@@ -324,49 +341,49 @@ model Message {
   chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender User @relation(fields: [senderId], references: [id])
 
-  @@map("messages")
   @@index([chatId])
   @@index([createdAt])
+  @@map("messages")
 }
 
 model Address {
-  id              String   @id @default(uuid())
-  userId          String   @map("user_id")
-  name            String   @db.Text
-  phone           String   @db.VarChar(20)
-  
-  provinceCode    String   @map("province_code") @db.VarChar(10)
-  provinceName    String   @map("province_name") @db.VarChar(100)
-  districtCode    String   @map("district_code") @db.VarChar(10)
-  districtName    String   @map("district_name") @db.VarChar(100)
-  wardCode        String   @map("ward_code") @db.VarChar(10)
-  wardName        String   @map("ward_name") @db.VarChar(100)
-  streetDetail    String   @map("street_detail") @db.Text
-  
-  isDefault       Boolean  @default(false) @map("is_default")
-  
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
-  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+  name   String @db.Text
+  phone  String @db.VarChar(20)
+
+  provinceCode String @map("province_code") @db.VarChar(10)
+  provinceName String @map("province_name") @db.VarChar(100)
+  districtCode String @map("district_code") @db.VarChar(10)
+  districtName String @map("district_name") @db.VarChar(100)
+  wardCode     String @map("ward_code") @db.VarChar(10)
+  wardName     String @map("ward_name") @db.VarChar(100)
+  streetDetail String @map("street_detail") @db.Text
+
+  isDefault Boolean @default(false) @map("is_default")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("addresses")
   @@index([userId])
+  @@map("addresses")
 }
 
 model ActivityLog {
   id        String   @id @default(uuid())
   type      String   @db.VarChar(50) // "ORDER_CREATED"
   message   String   @db.Text
-  data      Json?    // Optional JSON payload for the activity
+  data      Json? // Optional JSON payload for the activity
   isRead    Boolean  @default(false) @map("is_read")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  @@map("activity_logs")
   @@index([type])
   @@index([isRead])
   @@index([createdAt])
+  @@map("activity_logs")
 }
 
 model SystemSetting {
@@ -384,42 +401,42 @@ model SaleCampaign {
   name        String   @db.VarChar(255)
   description String?  @db.Text
   type        String   @default("FLASH_SALE") @db.VarChar(50) // "FLASH_SALE", "EVENT_SALE"
-  status      String   @default("DRAFT") @db.VarChar(50)      // "DRAFT", "SCHEDULED", "ACTIVE", "ENDED"
+  status      String   @default("DRAFT") @db.VarChar(50) // "DRAFT", "SCHEDULED", "ACTIVE", "ENDED"
   startDate   DateTime @map("start_date") @db.Timestamptz
   endDate     DateTime @map("end_date") @db.Timestamptz
   bannerUrl   String?  @map("banner_url") @db.Text
   isActive    Boolean  @default(true) @map("is_active")
 
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  items       SaleCampaignItem[]
+  items SaleCampaignItem[]
 
-  @@map("sale_campaigns")
   @@index([status])
   @@index([startDate, endDate])
+  @@map("sale_campaigns")
 }
 
 model SaleCampaignItem {
-  id            String   @id @default(uuid())
-  campaignId    String   @map("campaign_id")
-  productId     String   @map("product_id")
-  discountValue Decimal  @map("discount_value") @db.Decimal(12, 2)
-  discountType  String   @default("PERCENTAGE") @map("discount_type") @db.VarChar(20) // "PERCENTAGE", "FIXED_AMOUNT"
-  salePrice     Decimal  @map("sale_price") @db.Decimal(12, 2)
-  limitQuantity Int?     @map("limit_quantity")
-  soldQuantity  Int      @default(0) @map("sold_quantity")
-  
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id            String  @id @default(uuid())
+  campaignId    String  @map("campaign_id")
+  productId     String  @map("product_id")
+  discountValue Decimal @map("discount_value") @db.Decimal(12, 2)
+  discountType  String  @default("PERCENTAGE") @map("discount_type") @db.VarChar(20) // "PERCENTAGE", "FIXED_AMOUNT"
+  salePrice     Decimal @map("sale_price") @db.Decimal(12, 2)
+  limitQuantity Int?    @map("limit_quantity")
+  soldQuantity  Int     @default(0) @map("sold_quantity")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   campaign SaleCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   product  Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([campaignId, productId])
-  @@map("sale_campaign_items")
   @@index([campaignId])
   @@index([productId])
+  @@map("sale_campaign_items")
 }
 
 model Wishlist {
@@ -432,6 +449,6 @@ model Wishlist {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
-  @@map("wishlists")
   @@index([userId])
-}
+  @@map("wishlists")
+}

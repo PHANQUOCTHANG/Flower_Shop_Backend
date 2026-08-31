@@ -45,16 +45,16 @@ export const CheckoutSchema = z.object({
 });
 
 // Validation cập nhật trạng thái
-export const UpdateOrderStatusSchema = z.object({
-  status: z.enum([
-    "pending",
-    "processing",
-    "shipping",
-    "completed",
-    "cancelled",
-  ]),
+import { OrderStatus, PaymentStatus } from "@prisma/client";
 
-  paymentStatus: z.enum(["unpaid", "paid", "refunded"]).optional(),
+// Chuẩn hoá input về UPPERCASE trước khi validate với Prisma enum
+// (Prisma enum dùng key UPPERCASE ở tầng JS dù DB column là lowercase qua @map,
+//  còn phía client/UI đang thao tác với chuỗi lowercase — xem normalizeQueryOrder)
+const toUpperCase = (val: unknown) => (typeof val === "string" ? val.toUpperCase() : val);
+
+export const UpdateOrderStatusSchema = z.object({
+  status: z.preprocess(toUpperCase, z.nativeEnum(OrderStatus)),
+  paymentStatus: z.preprocess(toUpperCase, z.nativeEnum(PaymentStatus)).optional(),
 });
 
 // Type DTO

@@ -1,4 +1,4 @@
-import { PrismaClient, Order, Prisma } from "@prisma/client";
+import { PrismaClient, Order, Prisma, OrderStatus, PaymentStatus } from "@prisma/client";
 import { IPaginatedResult } from "@/utils/query";
 import { OrderQuery } from "./order.type";
 import { getSearchPattern } from "@/utils/searchUtils";
@@ -40,6 +40,7 @@ export interface DashboardStats {
 }
 
 export interface IOrderRepository {
+  findFirst(params: { where: Prisma.OrderWhereInput }): Promise<Order | null>;
   createOrder(data: any, cartId?: string): Promise<Order>;
   findAll(query: OrderQuery): Promise<IPaginatedResult<Order>>;
   findById(id: string): Promise<any | null>;
@@ -47,8 +48,8 @@ export interface IOrderRepository {
     userId: string,
     query: OrderQuery,
   ): Promise<IPaginatedResult<Order>>;
-  updateStatus(id: string, status: string): Promise<Order | null>;
-  updatePaymentStatus(id: string, paymentStatus: string): Promise<Order | null>;
+  updateStatus(id: string, status: OrderStatus): Promise<Order | null>;
+  updatePaymentStatus(id: string, paymentStatus: PaymentStatus): Promise<Order | null>;
   updateOrderItemReviewStatus(
     orderId: string,
     productId: string,
@@ -75,7 +76,7 @@ export class OrderRepository implements IOrderRepository {
       shippingAddress: string;
       shippingPhone: string;
       paymentMethod: string;
-      status?: string; // Optional — mặc định "pending", VNPay dùng "pending_payment"
+      status?: OrderStatus;
       items: {
         productId: string;
         quantity: number;
@@ -289,7 +290,7 @@ export class OrderRepository implements IOrderRepository {
   }
 
   // Cập nhật trạng thái
-  async updateStatus(id: string, status: string): Promise<Order | null> {
+  async updateStatus(id: string, status: OrderStatus): Promise<Order | null> {
     try {
       return await this.prisma.order.update({
         where: { id },
@@ -302,7 +303,7 @@ export class OrderRepository implements IOrderRepository {
   }
 
   // Cập nhật trạng thái thanh toán (VNPay IPN callback)
-  async updatePaymentStatus(id: string, paymentStatus: string): Promise<Order | null> {
+  async updatePaymentStatus(id: string, paymentStatus: PaymentStatus): Promise<Order | null> {
     try {
       return await this.prisma.order.update({
         where: { id },
@@ -362,9 +363,11 @@ export class OrderRepository implements IOrderRepository {
       _count: true,
     });
 
+    // Prisma trả về status UPPERCASE ("PENDING"...) — chuẩn hoá lowercase
+    // để khớp hợp đồng API hiện có (FE đọc counts.pending, counts.processing, ...)
     const statusCounts: Record<string, number> = {};
     results.forEach((result) => {
-      statusCounts[result.status] = result._count;
+      statusCounts[result.status.toLowerCase()] = result._count;
     });
 
     return statusCounts;
@@ -434,7 +437,7 @@ export class OrderRepository implements IOrderRepository {
     // Tối ưu: lấy stats bằng 1 query aggregate thay vì N query song song
     const orderStats = await this.prisma.order.groupBy({
       by: ["userId"],
-      where: { status: "completed", userId: { in: users.map((u) => u.id) } },
+      where: { status: OrderStatus.COMPLETED, userId: { in: users.map((u) => u.id) } },
       _sum: { totalPrice: true },
       _max: { createdAt: true },
       _min: { createdAt: true },
@@ -568,6 +571,12 @@ export class OrderRepository implements IOrderRepository {
     };
   }
 
+  async findFirst(params: { where: Prisma.OrderWhereInput }): Promise<Order | null> {
+    return this.prisma.order.findFirst({
+      where: params.where,
+    });
+  }
+
   // ─── Dashboard Stats ──────────────────────────────────────────────────────
 
   async getDashboardStats(): Promise<DashboardStats> {
@@ -613,7 +622,7 @@ export class OrderRepository implements IOrderRepository {
       // 1. Doanh thu tháng hiện tại (chỉ completed)
       this.prisma.order.aggregate({
         where: {
-          status: "completed",
+          status: OrderStatus.COMPLETED,
           createdAt: { gte: curStart, lte: curEnd },
         },
         _sum: { totalPrice: true },
@@ -622,7 +631,7 @@ export class OrderRepository implements IOrderRepository {
       // 2. Doanh thu tháng trước (chỉ completed)
       this.prisma.order.aggregate({
         where: {
-          status: "completed",
+          status: OrderStatus.COMPLETED,
           createdAt: { gte: prevStart, lte: prevEnd },
         },
         _sum: { totalPrice: true },
@@ -640,13 +649,13 @@ export class OrderRepository implements IOrderRepository {
 
       // 5. Đơn chờ xử lý tháng hiện tại
       this.prisma.order.count({
-        where: { status: "pending", createdAt: { gte: curStart, lte: curEnd } },
+        where: { status: OrderStatus.PENDING, createdAt: { gte: curStart, lte: curEnd } },
       }),
 
       // 6. Đơn chờ xử lý tháng trước
       this.prisma.order.count({
         where: {
-          status: "pending",
+          status: OrderStatus.PENDING,
           createdAt: { gte: prevStart, lte: prevEnd },
         },
       }),
@@ -685,7 +694,7 @@ export class OrderRepository implements IOrderRepository {
         by: ["productId"],
         where: {
           order: {
-            status: "completed",
+            status: OrderStatus.COMPLETED,
             createdAt: { gte: curStart, lte: curEnd },
           },
         },
@@ -722,8 +731,8 @@ export class OrderRepository implements IOrderRepository {
         productId: item.productId,
         name: product?.name ?? "Sản phẩm đã xóa",
         thumbnailUrl: product?.thumbnailUrl ?? null,
-        totalQuantity: item._sum.quantity ?? 0,
-        totalRevenue: Number(item._sum.subtotal ?? 0),
+        totalQuantity: item._sum?.quantity ?? 0,
+        totalRevenue: Number(item._sum?.subtotal ?? 0),
       };
     });
 
@@ -734,7 +743,7 @@ export class OrderRepository implements IOrderRepository {
     topItems.forEach((item) => {
       const product = productMap.get(item.productId);
       const catName = product?.categories?.[0]?.category?.name ?? "Khác";
-      const qty = item._sum.quantity ?? 0;
+      const qty = item._sum?.quantity ?? 0;
       totalQty += qty;
 
       const existing = categoryMap.get(catName);
