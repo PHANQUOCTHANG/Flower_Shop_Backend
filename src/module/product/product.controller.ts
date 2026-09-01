@@ -237,3 +237,32 @@ export const deleteProduct = asyncHandler(
       .json(ApiResponse.success(null, "Đã xóa sản phẩm thành công"));
   },
 );
+
+// [GET] /api/v1/products/trash - Lấy danh sách sản phẩm trong thùng rác
+export const getTrashProducts = asyncHandler(
+  async (req: Request, res: Response): Promise<Response> => {
+    const query = normalizeQueryProduct(req.query);
+    const result = await productService.findTrash(query);
+    return res.status(200).json(ApiResponse.paginate(result));
+  },
+);
+
+// [DELETE] /api/v1/products/:id/permanent - Xóa vĩnh viễn sản phẩm khỏi thùng rác
+export const hardDeleteProduct = asyncHandler(
+  async (req: Request, res: Response): Promise<Response> => {
+    await productService.hardDelete(req.params.id as string);
+    return res
+      .status(200)
+      .json(ApiResponse.success(null, "Đã xóa vĩnh viễn sản phẩm"));
+  },
+);
+
+// [PATCH] /api/v1/products/:id/restore - Khôi phục sản phẩm từ thùng rác
+export const restoreProduct = asyncHandler(
+  async (req: Request, res: Response): Promise<Response> => {
+    const data = await productService.restore(req.params.id as string);
+    return res
+      .status(200)
+      .json(ApiResponse.success(data, "Đã khôi phục sản phẩm"));
+  },
+);

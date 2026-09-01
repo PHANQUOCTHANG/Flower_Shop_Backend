@@ -4,6 +4,7 @@ import { IProductRepository } from "./product.repository";
 import { ProductResponseDto } from "./product.response";
 import { CreateProductDto, UpdateProductDto } from "./product.request";
 import { ProductQuery } from "@/module/product/product.type";
+import { IImageService } from "@/module/product/image.service";
 import {
   getCache,
   setCache,
@@ -20,6 +21,10 @@ export interface IProductService {
   update(id: string, dto: UpdateProductDto): Promise<ProductResponseDto>;
   delete(id: string): Promise<void>;
   findGroupedByCategory(limit: number): Promise<any>;
+  // Thùng rác (sản phẩm đã xóa mềm)
+  findTrash(query: ProductQuery): Promise<any>;
+  hardDelete(id: string): Promise<void>;
+  restore(id: string): Promise<ProductResponseDto>;
 }
 
 export class ProductService implements IProductService {
@@ -28,7 +33,21 @@ export class ProductService implements IProductService {
   private readonly CACHE_TTL_DETAIL = 900; // 15 phút - chi tiết sản phẩm (rất ít thay đổi)
   private readonly CACHE_TTL_SEARCH = 300; // 5 phút - tìm kiếm/lọc (hay thay đổi)
 
-  constructor(private readonly productRepo: IProductRepository) {}
+  constructor(
+    private readonly productRepo: IProductRepository,
+    private readonly imageService: IImageService,
+  ) {}
+
+  // Xóa toàn bộ cache liên quan tới một sản phẩm cụ thể
+  private async invalidateProductCache(id: string, slug: string) {
+    await Promise.all([
+      deleteCache(`${this.CACHE_KEY}:id:${id}`),
+      deleteCache(`${this.CACHE_KEY}:slug:${slug}`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:list:*`),
+      deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`),
+      AIService.invalidateKnowledgeCache(),
+    ]);
+  }
 
   // Tạo sản phẩm mới
   async create(dto: CreateProductDto): Promise<ProductResponseDto> {
@@ -37,7 +56,8 @@ export class ProductService implements IProductService {
 
     // Kiểm tra slug có trùng lặp không
     const existed = await this.productRepo.findBySlug(slug);
-    if (existed) {
+    console.log("CREATE: ", existed);
+    if (existed && existed.status === "active") {
       throw new AppError("Sản phẩm với tên này đã tồn tại", 400);
     }
 
@@ -180,14 +200,58 @@ export class ProductService implements IProductService {
     // Đánh dấu xóa mềm
     await this.productRepo.softDelete(id);
 
-    // Xóa cache liên quan và cache của AI
-    await Promise.all([
-      deleteCache(`${this.CACHE_KEY}:id:${id}`), // Cache chi tiết ID
-      deleteCache(`${this.CACHE_KEY}:slug:${exists.slug}`), // Cache chi tiết slug
-      deleteCacheByPattern(`${this.CACHE_KEY}:list:*`), // Cache danh sách (bị ảnh hưởng bởi xóa)
-      deleteCacheByPattern(`${this.CACHE_KEY}:grouped:*`), // Xóa luôn grouped cache
-      AIService.invalidateKnowledgeCache(),
-    ]);
+    await this.invalidateProductCache(id, exists.slug);
+  }
+
+  // Lấy danh sách sản phẩm trong thùng rác (đã xóa mềm)
+  async findTrash(query: ProductQuery): Promise<any> {
+    const result = await this.productRepo.findTrash(query);
+    return {
+      ...result,
+      data: ProductResponseDto.fromList(result.data),
+    };
+  }
+
+  // Xóa vĩnh viễn sản phẩm khỏi DB — chỉ áp dụng cho sản phẩm đang ở thùng rác
+  async hardDelete(id: string): Promise<void> {
+    const exists = await this.productRepo.findTrashedById(id);
+    if (!exists) {
+      throw new AppError("Sản phẩm không tồn tại trong thùng rác", 404);
+    }
+
+    // Thu thập toàn bộ publicId ảnh (thumbnail + gallery) để dọn trên Cloudinary
+    const publicIds = [
+      ...(exists.thumbnailPublicId ? [exists.thumbnailPublicId] : []),
+      ...((exists as any).images ?? [])
+        .map((img: any) => img.publicId)
+        .filter(Boolean),
+    ];
+
+    await this.productRepo.hardDelete(id);
+
+    if (publicIds.length > 0) {
+      // Không chặn thao tác xóa nếu dọn ảnh trên Cloudinary thất bại
+      await this.imageService.deleteMultiple(publicIds).catch(() => {});
+    }
+
+    await this.invalidateProductCache(id, exists.slug);
+  }
+
+  // Khôi phục sản phẩm từ thùng rác
+  async restore(id: string): Promise<ProductResponseDto> {
+    const exists = await this.productRepo.findTrashedById(id);
+    if (!exists) {
+      throw new AppError("Sản phẩm không tồn tại trong thùng rác", 404);
+    }
+
+    const restored = await this.productRepo.restore(id);
+    if (!restored) {
+      throw new AppError("Khôi phục sản phẩm thất bại", 500);
+    }
+
+    await this.invalidateProductCache(id, exists.slug);
+
+    return ProductResponseDto.from(restored);
   }
 
   // Lấy sản phẩm nhóm theo danh mục

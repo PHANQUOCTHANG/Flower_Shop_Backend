@@ -13,6 +13,11 @@ export interface IProductRepository {
   findGroupedByCategory(
     limit: number,
   ): Promise<{ category: any; products: Product[] }[]>;
+  // Thùng rác (sản phẩm đã xóa mềm)
+  findTrash(query: ProductQuery): Promise<IPaginatedResult<Product>>;
+  findTrashedById(id: string): Promise<Product | null>;
+  hardDelete(id: string): Promise<void>;
+  restore(id: string): Promise<Product | null>;
 }
 
 export class ProductRepository implements IProductRepository {
@@ -84,24 +89,11 @@ export class ProductRepository implements IProductRepository {
     });
   }
 
-  // Lấy danh sách sản phẩm với phân trang và lọc
-  async findAll(query: ProductQuery): Promise<IPaginatedResult<Product>> {
-    const page = Math.max(query.page ?? 1, 1);
-    const limit = Math.min(query.limit ?? 10, 100);
-
-    const where: Prisma.ProductWhereInput = {
-      deletedAt: null,
-    };
-
-    // Lọc theo trạng thái
-    if (query.status === "all") {
-      // Bỏ qua lọc để admin xem tất cả
-    } else if (query.status) {
-      where.status = query.status;
-    } else {
-      where.status = "active";
-    }
-
+  // Áp dụng các bộ lọc dùng chung giữa danh sách sản phẩm và thùng rác
+  private applyCommonFilters(
+    where: Prisma.ProductWhereInput,
+    query: ProductQuery,
+  ): void {
     // Tìm kiếm theo tên và SKU (không phân biệt hoa thường và dấu)
     if (query.search) {
       const normalizedSearch = getSearchPattern(query.search);
@@ -129,20 +121,41 @@ export class ProductRepository implements IProductRepository {
     if (query.priceMax !== undefined) {
       (where as any).price = { ...(where as any).price, lte: query.priceMax };
     }
+  }
 
-    // Sắp xếp dữ liệu
-    let orderBy: any = { createdAt: "desc" };
-    switch (query.sort) {
+  // Xác định thứ tự sắp xếp từ tham số sort
+  private resolveOrderBy(sort?: string): any {
+    switch (sort) {
       case "oldest":
-        orderBy = { createdAt: "asc" };
-        break;
+        return { createdAt: "asc" };
       case "price-asc":
-        orderBy = { price: "asc" };
-        break;
+        return { price: "asc" };
       case "price-desc":
-        orderBy = { price: "desc" };
-        break;
+        return { price: "desc" };
+      default:
+        return { createdAt: "desc" };
     }
+  }
+
+  // Lấy danh sách sản phẩm với phân trang và lọc
+  async findAll(query: ProductQuery): Promise<IPaginatedResult<Product>> {
+    const page = Math.max(query.page ?? 1, 1);
+    const limit = Math.min(query.limit ?? 10, 100);
+
+    const where: Prisma.ProductWhereInput = {
+      deletedAt: null,
+    };
+
+    // Lọc theo trạng thái
+    if (query.status === "all") {
+      // Bỏ qua lọc để admin xem tất cả
+    } else if (query.status) {
+      where.status = query.status;
+    } else {
+      where.status = "active";
+    }
+
+    this.applyCommonFilters(where, query);
 
     // Truy vấn song song để tối ưu hiệu năng
     const [data, total, statusCounts] = await Promise.all([
@@ -150,7 +163,7 @@ export class ProductRepository implements IProductRepository {
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy,
+        orderBy: this.resolveOrderBy(query.sort),
         include: {
           images: { where: { isPrimary: true }, take: 1 },
           categories: { include: { category: true } },
@@ -168,6 +181,51 @@ export class ProductRepository implements IProductRepository {
       totalPages: Math.ceil(total / limit),
       statusCounts,
     };
+  }
+
+  // Lấy danh sách sản phẩm trong thùng rác (đã xóa mềm) với phân trang và lọc
+  async findTrash(query: ProductQuery): Promise<IPaginatedResult<Product>> {
+    const page = Math.max(query.page ?? 1, 1);
+    const limit = Math.min(query.limit ?? 10, 100);
+
+    const where: Prisma.ProductWhereInput = {
+      deletedAt: { not: null },
+    };
+
+    this.applyCommonFilters(where, query);
+
+    const [data, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: this.resolveOrderBy(query.sort),
+        include: {
+          images: { where: { isPrimary: true }, take: 1 },
+          categories: { include: { category: true } },
+        },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // Tìm sản phẩm đã xóa mềm theo ID (dành cho thao tác khôi phục/xóa vĩnh viễn)
+  async findTrashedById(id: string): Promise<Product | null> {
+    return this.prisma.product.findFirst({
+      where: { id, deletedAt: { not: null } },
+      include: {
+        images: true,
+        categories: { include: { category: true } },
+      },
+    }) as Promise<Product | null>;
   }
 
   // Đếm số sản phẩm theo trạng thái
@@ -255,6 +313,33 @@ export class ProductRepository implements IProductRepository {
         status: "hidden",
       },
     });
+  }
+
+  // Xóa vĩnh viễn sản phẩm khỏi DB (chỉ dùng từ thùng rác)
+  async hardDelete(id: string): Promise<void> {
+    try {
+      await this.prisma.product.delete({ where: { id } });
+    } catch (error: any) {
+      // Sản phẩm đã bị xóa trước đó, coi như thành công
+      if (error.code === "P2025") return;
+      throw error;
+    }
+  }
+
+  // Khôi phục sản phẩm từ thùng rác
+  async restore(id: string): Promise<Product | null> {
+    try {
+      return await this.prisma.product.update({
+        where: { id },
+        data: {
+          deletedAt: null,
+          status: "active",
+        },
+      });
+    } catch (error: any) {
+      if (error.code === "P2025") return null;
+      throw error;
+    }
   }
 
   // Lấy danh sách sản phẩm gom theo danh mục

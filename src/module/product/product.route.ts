@@ -29,6 +29,27 @@ router.route("/slug/:slug").get(productCtrl.getProductBySlug);
 // GET sản phẩm nhóm theo danh mục
 router.route("/grouped-by-category").get(productCtrl.getProductsGroupedByCategory);
 
+// GET danh sách sản phẩm trong thùng rác (đặt trước "/:id" để tránh xung đột route)
+router
+  .route("/trash")
+  .get(requireAuth, requireRole("ADMIN"), productCtrl.getTrashProducts);
+
+// DELETE xóa vĩnh viễn sản phẩm khỏi thùng rác
+router.route("/:id/permanent").delete(
+  requireAuth,
+  requireRole("ADMIN"),
+  validationMiddleware(ProductIdParamSchema, "params"),
+  productCtrl.hardDeleteProduct,
+);
+
+// PATCH khôi phục sản phẩm từ thùng rác
+router.route("/:id/restore").patch(
+  requireAuth,
+  requireRole("ADMIN"),
+  validationMiddleware(ProductIdParamSchema, "params"),
+  productCtrl.restoreProduct,
+);
+
 // GET, PATCH, DELETE sản phẩm theo ID
 router
   .route("/:id")

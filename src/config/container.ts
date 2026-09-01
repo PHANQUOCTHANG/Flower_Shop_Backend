@@ -75,7 +75,11 @@ export const userService: IUserService = new UserService(userRepository);
 
 // Product
 const productRepository: IProductRepository = new ProductRepository(prisma);
-export const productService: IProductService = new ProductService(productRepository);
+export const imageService: IImageService = new ImageService();
+export const productService: IProductService = new ProductService(
+  productRepository,
+  imageService,
+);
 
 // Category
 const categoryRepository: ICategoryRepository = new CategoryRepository(prisma);
@@ -134,7 +138,6 @@ export const orderService: IOrderService = new OrderService(
   emailService,
   campaignRepository,
 );
-export const imageService: IImageService = new ImageService();
 
 // Chat
 const chatRepository: IChatRepository = new ChatRepository(prisma);
