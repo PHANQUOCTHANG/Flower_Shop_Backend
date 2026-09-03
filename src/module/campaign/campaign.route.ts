@@ -2,7 +2,13 @@ import { Router } from "express";
 import * as campaignController from "./campaign.controller";
 import { requireAuth, requireRole } from "@/middleware/auth.middleware";
 import validationMiddleware from "@/middleware/validate.middleware";
-import { CreateCampaignSchema, UpdateCampaignSchema, CampaignIdParamSchema } from "./campaign.request";
+import {
+  CreateCampaignSchema,
+  UpdateCampaignSchema,
+  CampaignIdParamSchema,
+  CampaignQuerySchema,
+  UpdateCampaignStatusSchema,
+} from "./campaign.request";
 
 const router = Router();
 
@@ -17,8 +23,12 @@ router.get("/active/items", campaignController.getActiveCampaignItems);
 // ─── Admin Routes (Cần auth + role ADMIN) ───────────────────────────────────
 router.use(requireAuth, requireRole("ADMIN"));
 
-// GET /campaigns — Danh sách tất cả chiến dịch
-router.get("/", campaignController.getCampaigns);
+// GET /campaigns — Danh sách tất cả chiến dịch (phân trang/search/filter)
+router.get(
+  "/",
+  validationMiddleware(CampaignQuerySchema, "query"),
+  campaignController.getCampaigns,
+);
 
 // POST /campaigns — Tạo chiến dịch mới
 router.post(
@@ -42,7 +52,22 @@ router.put(
   campaignController.updateCampaign,
 );
 
-// DELETE /campaigns/:id — Xóa chiến dịch
+// PATCH /campaigns/:id/status — Đổi trạng thái nhanh
+router.patch(
+  "/:id/status",
+  validationMiddleware(CampaignIdParamSchema, "params"),
+  validationMiddleware(UpdateCampaignStatusSchema),
+  campaignController.updateCampaignStatus,
+);
+
+// PATCH /campaigns/:id/restore — Khôi phục chiến dịch đã xóa mềm
+router.patch(
+  "/:id/restore",
+  validationMiddleware(CampaignIdParamSchema, "params"),
+  campaignController.restoreCampaign,
+);
+
+// DELETE /campaigns/:id — Xóa (mềm) chiến dịch
 router.delete(
   "/:id",
   validationMiddleware(CampaignIdParamSchema, "params"),

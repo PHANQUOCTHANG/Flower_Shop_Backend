@@ -14,6 +14,7 @@ import "@/config/cloudinary";
 import http from "http";
 import { initSocket } from "@/config/socket";
 import { startOrderWorker } from "@/module/order/order.worker";
+import { startCampaignStatusWorker } from "@/module/campaign/campaign.worker";
 import { setupSwagger } from "@/config/swagger";
 import logger from "@/utils/logger";
 
@@ -87,6 +88,7 @@ async function startServer() {
   const httpServer = http.createServer(app);
   initSocket(httpServer);
   startOrderWorker();
+  startCampaignStatusWorker();
 
   // 3. Listen trên httpServer thay vì app.listen
   httpServer.listen(PORT, () => {

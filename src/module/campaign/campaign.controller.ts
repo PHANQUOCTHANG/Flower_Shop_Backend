@@ -9,10 +9,10 @@ export const createCampaign = asyncHandler(async (req: Request, res: Response) =
   return res.status(201).json(ApiResponse.success(campaign, "Tạo chiến dịch thành công"));
 });
 
-// [GET] /api/v1/campaigns — Lấy danh sách chiến dịch (Admin)
+// [GET] /api/v1/campaigns — Lấy danh sách chiến dịch (Admin, phân trang/search/filter)
 export const getCampaigns = asyncHandler(async (req: Request, res: Response) => {
-  const campaigns = await campaignService.getCampaigns(req.query);
-  return res.status(200).json(ApiResponse.success(campaigns));
+  const result = await campaignService.getCampaigns(req.query as any);
+  return res.status(200).json(ApiResponse.paginate(result));
 });
 
 // [GET] /api/v1/campaigns/active — Lấy chiến dịch đang active (Public)
@@ -44,6 +44,21 @@ export const getCampaignById = asyncHandler(async (req: Request, res: Response) 
 export const updateCampaign = asyncHandler(async (req: Request, res: Response) => {
   const campaign = await campaignService.updateCampaign(req.params.id as string, req.body);
   return res.status(200).json(ApiResponse.success(campaign, "Cập nhật chiến dịch thành công"));
+});
+
+// [PATCH] /api/v1/campaigns/:id/status — Đổi trạng thái nhanh (Admin)
+export const updateCampaignStatus = asyncHandler(async (req: Request, res: Response) => {
+  const campaign = await campaignService.updateCampaignStatus(
+    req.params.id as string,
+    req.body.status,
+  );
+  return res.status(200).json(ApiResponse.success(campaign, "Cập nhật trạng thái thành công"));
+});
+
+// [PATCH] /api/v1/campaigns/:id/restore — Khôi phục chiến dịch đã xóa (Admin)
+export const restoreCampaign = asyncHandler(async (req: Request, res: Response) => {
+  const campaign = await campaignService.restoreCampaign(req.params.id as string);
+  return res.status(200).json(ApiResponse.success(campaign, "Khôi phục chiến dịch thành công"));
 });
 
 // [DELETE] /api/v1/campaigns/:id — Xóa chiến dịch (Admin)

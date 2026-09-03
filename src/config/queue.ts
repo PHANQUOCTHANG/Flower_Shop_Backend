@@ -81,3 +81,14 @@ export const zalopayCleanupQueue = new Queue("zalopay-cleanup", {
     removeOnFail: { age: 86400 },
   },
 });
+
+// ─── Campaign Status Sync Queue ───────────────────────────────────────────────
+// Job lặp lại mỗi phút, tự chuyển trạng thái campaign theo thời gian
+// (SCHEDULED→ACTIVE, ACTIVE→ENDED) — không phát socket, chỉ cập nhật DB.
+export const campaignStatusQueue = new Queue("campaign-status-sync", {
+  connection: getBullMQRedis(),
+  defaultJobOptions: {
+    removeOnComplete: { age: 3600, count: 10 },
+    removeOnFail: { age: 86400 },
+  },
+});

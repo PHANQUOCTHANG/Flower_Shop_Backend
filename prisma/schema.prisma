@@ -406,6 +406,7 @@ model SaleCampaign {
   endDate     DateTime @map("end_date") @db.Timestamptz
   bannerUrl   String?  @map("banner_url") @db.Text
   isActive    Boolean  @default(true) @map("is_active")
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
@@ -414,6 +415,7 @@ model SaleCampaign {
 
   @@index([status])
   @@index([startDate, endDate])
+  @@index([deletedAt])
   @@map("sale_campaigns")
 }
 
