@@ -3,6 +3,9 @@ import { normalizeQuery } from "@/utils/query";
 
 import { OrderStatus, PaymentStatus } from "@prisma/client";
 
+// Các cổng thanh toán online hỗ trợ luồng PENDING_PAYMENT → xác nhận qua callback/IPN
+export type OnlinePaymentGateway = "vnpay" | "zalopay";
+
 // Kiểu query cho filter/sort đơn hàng
 export interface OrderQuery extends BaseQuery {
   status?: OrderStatus;

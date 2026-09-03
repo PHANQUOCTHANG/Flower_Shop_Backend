@@ -10,6 +10,8 @@ import {
   setCache,
   deleteCache,
   deleteCacheByPattern,
+  CACHE_NULL,
+  isCacheNull,
 } from "@/utils/cache";
 import { AIService } from "@/module/chat/ai.service";
 
@@ -32,6 +34,7 @@ export class ProductService implements IProductService {
   private readonly CACHE_TTL_LIST = 600; // 10 phút - danh sách sản phẩm (ít thay đổi)
   private readonly CACHE_TTL_DETAIL = 900; // 15 phút - chi tiết sản phẩm (rất ít thay đổi)
   private readonly CACHE_TTL_SEARCH = 300; // 5 phút - tìm kiếm/lọc (hay thay đổi)
+  private readonly CACHE_TTL_NOT_FOUND = 30; // 30 giây - chống penetration cho id/slug không tồn tại
 
   constructor(
     private readonly productRepo: IProductRepository,
@@ -107,12 +110,16 @@ export class ProductService implements IProductService {
   async findById(id: string): Promise<ProductResponseDto> {
     // Kiểm tra cache trước
     const cacheKey = `${this.CACHE_KEY}:id:${id}`;
-    const cached = await getCache<ProductResponseDto>(cacheKey);
-    if (cached) return cached;
+    const cached = await getCache<ProductResponseDto | typeof CACHE_NULL>(cacheKey);
+    if (cached) {
+      if (isCacheNull(cached)) throw new AppError("Không tìm thấy sản phẩm", 404);
+      return cached as ProductResponseDto;
+    }
 
     // Lấy từ DB nếu không có trong cache
     const product = await this.productRepo.findById(id);
     if (!product) {
+      await setCache(cacheKey, CACHE_NULL, this.CACHE_TTL_NOT_FOUND);
       throw new AppError("Không tìm thấy sản phẩm", 404);
     }
 
@@ -128,14 +135,16 @@ export class ProductService implements IProductService {
   async findBySlug(slug: string): Promise<ProductResponseDto> {
     // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:slug:${slug}`;
-    const cached = await getCache<ProductResponseDto>(cacheKey);
+    const cached = await getCache<ProductResponseDto | typeof CACHE_NULL>(cacheKey);
     if (cached) {
-      return cached;
+      if (isCacheNull(cached)) throw new AppError("Không tìm thấy sản phẩm", 404);
+      return cached as ProductResponseDto;
     }
 
     // Truy vấn từ DB
     const product = await this.productRepo.findBySlug(slug);
     if (!product) {
+      await setCache(cacheKey, CACHE_NULL, this.CACHE_TTL_NOT_FOUND);
       throw new AppError("Không tìm thấy sản phẩm", 404);
     }
 

@@ -8,6 +8,8 @@ import {
   setCache,
   deleteCache,
   deleteCacheByPattern,
+  CACHE_NULL,
+  isCacheNull,
 } from "@/utils/cache";
 import { AIService } from "@/module/chat/ai.service";
 
@@ -23,6 +25,7 @@ export class CategoryService implements ICategoryService {
   private readonly CACHE_KEY = "categories";
   private readonly CACHE_TTL_LIST = 900; // 15 phút - danh sách danh mục (ít thay đổi)
   private readonly CACHE_TTL_DETAIL = 1800; // 30 phút - chi tiết danh mục (rất ít thay đổi)
+  private readonly CACHE_TTL_NOT_FOUND = 30; // 30 giây - chống penetration cho id không tồn tại
 
   constructor(private readonly categoryRepo: ICategoryRepository) {}
 
@@ -80,11 +83,15 @@ export class CategoryService implements ICategoryService {
   async findById(id: string): Promise<CategoryResponseDto> {
     // Kiểm tra cache
     const cacheKey = `${this.CACHE_KEY}:id:${id}`;
-    const cached = await getCache<CategoryResponseDto>(cacheKey);
-    if (cached) return cached;
+    const cached = await getCache<CategoryResponseDto | typeof CACHE_NULL>(cacheKey);
+    if (cached) {
+      if (isCacheNull(cached)) throw new AppError("Không tìm thấy danh mục", 404);
+      return cached as CategoryResponseDto;
+    }
 
     const category = await this.categoryRepo.findById(id);
     if (!category) {
+      await setCache(cacheKey, CACHE_NULL, this.CACHE_TTL_NOT_FOUND);
       throw new AppError("Không tìm thấy danh mục", 404);
     }
 

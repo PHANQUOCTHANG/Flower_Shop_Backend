@@ -1,5 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { getBullMQRedis, orderDLQ } from "@/config/queue";
+import { OnlinePaymentGateway } from "@/module/order/order.type";
 import { getIO } from "@/config/socket";
 import { orderService } from "@/config/container";
 import { CheckoutDto } from "@/module/order/order.request";
@@ -105,31 +106,40 @@ export const startOrderWorker = () => {
     }
   });
 
-  // ─── VNPay Cleanup Worker ────────────────────────────────────────────────────
-  // Xử lý delayed job hủy đơn hàng VNPay quá hạn 15 phút không thanh toán
-  const vnpayCleanupWorker = new Worker<{ orderId: string }>(
-    "vnpay-cleanup",
-    async (job: Job<{ orderId: string }>) => {
-      const { orderId } = job.data;
-      logger.info(`[VNPay Cleanup] Checking expired order: ${orderId}`);
+  // ─── Cleanup Worker cho cổng thanh toán online ──────────────────────────────
+  // Xử lý delayed job hủy đơn hàng quá hạn 15 phút không thanh toán (dùng chung
+  // cho mọi cổng — chỉ khác nhau ở tên queue BullMQ và label để log)
+  const makeCleanupWorker = (queueName: string, gateway: OnlinePaymentGateway) => {
+    const label = queueName === "vnpay-cleanup" ? "VNPay Cleanup" : "ZaloPay Cleanup";
+    const cleanupWorker = new Worker<{ orderId: string }>(
+      queueName,
+      async (job: Job<{ orderId: string }>) => {
+        const { orderId } = job.data;
+        logger.info(`[${label}] Checking expired order: ${orderId}`);
 
-      try {
-        await orderService.cancelExpiredVnpayOrder(orderId);
-        logger.info(`[VNPay Cleanup] Done for order ${orderId}`);
-      } catch (error: any) {
-        logger.error(`[VNPay Cleanup] Failed for order ${orderId}: ${error.message}`);
-        throw error;
-      }
-    },
-    {
-      connection: getBullMQRedis(),
-      concurrency: 1, // Hủy lai rai, không cần concurrency cao
-    },
-  );
+        try {
+          await orderService.cancelExpiredOnlinePaymentOrder(orderId, gateway);
+          logger.info(`[${label}] Done for order ${orderId}`);
+        } catch (error: any) {
+          logger.error(`[${label}] Failed for order ${orderId}: ${error.message}`);
+          throw error;
+        }
+      },
+      {
+        connection: getBullMQRedis(),
+        concurrency: 1, // Hủy lai rai, không cần concurrency cao
+      },
+    );
 
-  vnpayCleanupWorker.on("failed", (job, err) => {
-    logger.error(`[VNPay Cleanup] ❌ Job ${job?.id} failed: ${err.message}`);
-  });
+    cleanupWorker.on("failed", (job, err) => {
+      logger.error(`[${label}] ❌ Job ${job?.id} failed: ${err.message}`);
+    });
 
-  return { worker, vnpayCleanupWorker };
+    return cleanupWorker;
+  };
+
+  const vnpayCleanupWorker = makeCleanupWorker("vnpay-cleanup", "vnpay");
+  const zalopayCleanupWorker = makeCleanupWorker("zalopay-cleanup", "zalopay");
+
+  return { worker, vnpayCleanupWorker, zalopayCleanupWorker };
 };

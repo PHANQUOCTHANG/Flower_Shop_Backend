@@ -12,6 +12,7 @@ import reviewRoute from "@/module/review/review.route";
 import activityLogRoute from "@/module/activity-log/activity-log.route";
 import settingRoute from "@/module/setting/setting.route";
 import vnpayRoute from "@/module/vnpay/vnpay.route";
+import zalopayRoute from "@/module/zalopay/zalopay.route";
 import campaignRoute from "@/module/campaign/campaign.route";
 import wishlistRoute from "@/module/wishlist/wishlist.route";
 
@@ -30,6 +31,7 @@ const clientRoute = (app: Application) => {
   app.use(path + "/activity-logs", requireAuth, activityLogRoute);
   app.use(path + "/settings", settingRoute);
   app.use(path + "/vnpay", vnpayRoute); // Không cần auth — VNPay gọi trực tiếp
+  app.use(path + "/zalopay", zalopayRoute); // Không cần auth — ZaloPay gọi trực tiếp
   app.use(path + "/wishlist", requireAuth, wishlistRoute);
   app.use(path + "/campaigns", campaignRoute);
 };

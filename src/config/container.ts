@@ -169,3 +169,7 @@ export const wishlistService: IWishlistService = new WishlistService(
 // VNPay
 import { VnpayService, IVnpayService } from "@/module/vnpay/vnpay.service";
 export const vnpayService: IVnpayService = new VnpayService();
+
+// ZaloPay
+import { ZalopayService, IZalopayService } from "@/module/zalopay/zalopay.service";
+export const zalopayService: IZalopayService = new ZalopayService();

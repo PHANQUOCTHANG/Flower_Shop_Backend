@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { cartService, orderService, vnpayService } from "@/config/container";
+import { cartService, orderService, vnpayService, zalopayService } from "@/config/container";
 import { ApiResponse } from "@/utils/apiResponse";
 import { normalizeQuery } from "@/utils/query";
 import asyncHandler from "@/utils/asyncHandler";
@@ -39,10 +39,11 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const isVnpay = req.body.paymentMethod === "vnpay";
+    const isZalopay = req.body.paymentMethod === "zalopay";
 
     // Nếu là VNPay → xử lý đồng bộ ngay lập tức để lấy URL (KHÔNG đưa vào queue)
     if (isVnpay) {
-      const order = await orderService.createPendingVnpayOrder(userId, req.body);
+      const order = await orderService.createPendingOnlinePaymentOrder(userId, req.body, "vnpay");
       const vnpayUrl = vnpayService.createPaymentUrl({
         orderId: order.id,
         amount: order.totalPrice,
@@ -57,6 +58,26 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
           orderId: order.id,
           status: "pending_payment",
           vnpayUrl,
+        },
+      });
+    }
+
+    // Nếu là ZaloPay → tương tự VNPay, xử lý đồng bộ ngay lập tức để lấy URL
+    if (isZalopay) {
+      const order = await orderService.createPendingOnlinePaymentOrder(userId, req.body, "zalopay");
+      const { orderUrl } = await zalopayService.createOrder({
+        orderId: order.id,
+        amount: order.totalPrice,
+        orderInfo: `Thanh toan don hang ${order.id}`,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Đơn hàng đang chờ thanh toán ZaloPay",
+        data: {
+          orderId: order.id,
+          status: "pending_payment",
+          zalopayUrl: orderUrl,
         },
       });
     }
@@ -94,8 +115,8 @@ export const checkout = asyncHandler(async (req: Request, res: Response) => {
         },
       });
     } catch (queueError) {
-      // Nếu là VNPay và đã xử lý ở trên thì không vào đây
-      if (isVnpay) throw queueError;
+      // Nếu là VNPay/ZaloPay và đã xử lý ở trên thì không vào đây
+      if (isVnpay || isZalopay) throw queueError;
 
       console.error("[BullMQ Fallback] Redis quá tải hoặc sập, chuyển sang xử lý đặt hàng đồng bộ thẳng xuống DB:", queueError);
 

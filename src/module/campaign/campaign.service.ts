@@ -7,6 +7,8 @@ import {
   setCache,
   deleteCache,
   deleteCacheByPattern,
+  CACHE_NULL,
+  isCacheNull,
 } from "@/utils/cache";
 
 export interface ICampaignService {
@@ -108,11 +110,11 @@ export class CampaignService implements ICampaignService {
   async getActiveCampaign(): Promise<CampaignResponse | null> {
     const cacheKey = `${this.CACHE_KEY}:active`;
     const cached = await getCache<any>(cacheKey);
-    if (cached) return cached;
+    if (cached) return isCacheNull(cached) ? null : cached;
 
     const active = await this.campaignRepo.findActiveCampaign();
     if (!active) {
-      await setCache(cacheKey, null, this.CACHE_TTL_ACTIVE);
+      await setCache(cacheKey, CACHE_NULL, this.CACHE_TTL_ACTIVE);
       return null;
     }
 

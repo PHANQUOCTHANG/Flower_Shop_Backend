@@ -17,6 +17,13 @@ const logRedisError = (context: string, error: any) => {
   }
 };
 
+// Sentinel value đánh dấu "đã tra DB rồi và biết chắc không tồn tại" —
+// giúp phân biệt với cache miss thật (redis trả null) để chống Cache Penetration:
+// key rác/không tồn tại vẫn được cache lại nên không đánh thẳng DB mỗi lần.
+export const CACHE_NULL = "__CACHE_NULL__";
+
+export const isCacheNull = (value: unknown): boolean => value === CACHE_NULL;
+
 export const getCache = async <T>(key: string): Promise<T | null> => {
   try {
     const data = await redisClient.get(key);
@@ -33,8 +40,13 @@ export const setCache = async (
   ttl = 300
 ) => {
   try {
+    // Chống Cache Avalanche: rải ngẫu nhiên ±10% quanh TTL để các key không
+    // cùng hết hạn một lượt (vd. sau khi cache nguội đồng loạt lúc deploy).
+    const jitter = Math.round(ttl * 0.1 * (Math.random() * 2 - 1));
+    const finalTtl = Math.max(1, ttl + jitter);
+
     await redisClient.set(key, JSON.stringify(value), {
-      EX: ttl,
+      EX: finalTtl,
     });
   } catch (error) {
     logRedisError(`setCache(${key})`, error);

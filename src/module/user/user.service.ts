@@ -11,6 +11,8 @@ import {
   setCache,
   deleteCache,
   deleteCacheByPattern,
+  CACHE_NULL,
+  isCacheNull,
 } from "@/utils/cache";
 
 export interface IUserService {
@@ -25,6 +27,7 @@ export class UserService implements IUserService {
   private readonly CACHE_KEY = "users";
   private readonly CACHE_TTL_LIST = 600; // 10 phút - danh sách user (ít thay đổi)
   private readonly CACHE_TTL_DETAIL = 900; // 15 phút - chi tiết user (rất ít thay đổi)
+  private readonly CACHE_TTL_NOT_FOUND = 30; // 30 giây - chống penetration cho id không tồn tại
 
   constructor(private readonly userRepo: IUserRepository) {}
 
@@ -75,12 +78,18 @@ export class UserService implements IUserService {
   async findById(id: string): Promise<UserResponseDto> {
     // Kiểm tra cache trước
     const cacheKey = `${this.CACHE_KEY}:id:${id}`;
-    const cached = await getCache<UserResponseDto>(cacheKey);
-    if (cached) return cached;
+    const cached = await getCache<UserResponseDto | typeof CACHE_NULL>(cacheKey);
+    if (cached) {
+      if (isCacheNull(cached)) throw new AppError("Không tìm thấy người dùng", 404);
+      return cached as UserResponseDto;
+    }
 
     // Lấy từ DB
     const user = await this.userRepo.findById(id);
-    if (!user) throw new AppError("Không tìm thấy người dùng", 404);
+    if (!user) {
+      await setCache(cacheKey, CACHE_NULL, this.CACHE_TTL_NOT_FOUND);
+      throw new AppError("Không tìm thấy người dùng", 404);
+    }
 
     const response = UserResponseDto.from(user);
 

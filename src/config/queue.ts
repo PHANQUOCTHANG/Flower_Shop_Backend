@@ -69,3 +69,15 @@ export const vnpayCleanupQueue = new Queue("vnpay-cleanup", {
     removeOnFail: { age: 86400 },
   },
 });
+
+// ─── ZaloPay Cleanup Queue ────────────────────────────────────────────────────
+// Hủy các đơn pending_payment sau 15 phút nếu ZaloPay không callback
+export const zalopayCleanupQueue = new Queue("zalopay-cleanup", {
+  connection: getBullMQRedis(),
+  defaultJobOptions: {
+    attempts: 2,
+    backoff: { type: "fixed", delay: 5000 },
+    removeOnComplete: { age: 3600 },
+    removeOnFail: { age: 86400 },
+  },
+});

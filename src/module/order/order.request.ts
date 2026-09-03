@@ -33,7 +33,7 @@ export const CheckoutSchema = z.object({
       "Số điện thoại không hợp lệ (Ví dụ: 0912345678)",
     ),
 
-  paymentMethod: z.enum(["bank", "cod", "vnpay"]).default("bank"),
+  paymentMethod: z.enum(["bank", "cod", "vnpay", "zalopay"]).default("cod"),
 
   paymentStatus: z.enum(["unpaid", "paid"]).optional().default("unpaid"),
 

@@ -12,20 +12,30 @@ import {
   deleteCacheByPattern,
 } from "@/utils/cache";
 import { IUserRepository } from "@/module/user/user.repository";
-import { OrderQuery } from "./order.type";
+import { OrderQuery, OnlinePaymentGateway } from "./order.type";
 import { IActivityLogService } from "@/module/activity-log/activity-log.service";
 import { IEmailService } from "@/module/auth/email/email.service";
 import { getIO } from "@/config/socket";
 import { DashboardStats } from "./order.repository";
-import { vnpayCleanupQueue } from "@/config/queue";
+import { vnpayCleanupQueue, zalopayCleanupQueue } from "@/config/queue";
+
+// Nhãn hiển thị + queue dọn dẹp tương ứng cho từng cổng thanh toán online
+const GATEWAY_LABELS: Record<OnlinePaymentGateway, string> = {
+  vnpay: "VNPay",
+  zalopay: "ZaloPay",
+};
+const CLEANUP_QUEUES: Record<OnlinePaymentGateway, typeof vnpayCleanupQueue> = {
+  vnpay: vnpayCleanupQueue,
+  zalopay: zalopayCleanupQueue,
+};
 
 // ─── State Machine: Các transition trạng thái hợp lệ ────────────────────────
 // Key: trạng thái hiện tại → Value: danh sách trạng thái có thể chuyển sang
 // LƯU Ý: OrderStatus là Prisma enum — giá trị ở tầng JS luôn UPPERCASE
 // (chỉ giá trị lưu trong DB mới lowercase qua @map), nên các key/value ở đây
 // phải khớp OrderStatus.* chứ không phải chuỗi lowercase.
-// Thanh toán VNPay (PENDING_PAYMENT → PENDING) được xác nhận qua confirmVnpayPayment(),
-// không đi qua state machine này.
+// Thanh toán online (VNPay/ZaloPay) (PENDING_PAYMENT → PENDING) được xác nhận qua
+// confirmOnlinePayment(), không đi qua state machine này.
 const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
   [OrderStatus.PENDING_PAYMENT]: [OrderStatus.CANCELLED],                     // Chờ TT VNPay → Hủy (hết hạn/khách hủy)
   [OrderStatus.PENDING]:         [OrderStatus.PROCESSING, OrderStatus.CANCELLED], // Chờ xử lý → Đang xử lý | Hủy
@@ -37,14 +47,22 @@ const ORDER_STATUS_TRANSITIONS: Record<string, string[]> = {
 
 export interface IOrderService {
   checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
-  createPendingVnpayOrder(userId: string, dto: CheckoutDto): Promise<OrderResponseDto>;
-  confirmVnpayPayment(orderId: string, paidAmount?: number): Promise<OrderResponseDto>;
+  createPendingOnlinePaymentOrder(
+    userId: string,
+    dto: CheckoutDto,
+    gateway: OnlinePaymentGateway,
+  ): Promise<OrderResponseDto>;
+  confirmOnlinePayment(
+    gateway: OnlinePaymentGateway,
+    orderId: string,
+    paidAmount?: number,
+  ): Promise<OrderResponseDto>;
   findAll(query: OrderQuery): Promise<any>;
   findByUserId(userId: string, query: OrderQuery): Promise<any>;
   findById(orderId: string, userId: string): Promise<OrderResponseDto>;
   updateStatus(orderId: string, status: OrderStatus): Promise<OrderResponseDto>;
   cancelOrder(orderId: string, userId: string): Promise<OrderResponseDto>;
-  cancelExpiredVnpayOrder(orderId: string): Promise<void>;
+  cancelExpiredOnlinePaymentOrder(orderId: string, gateway: OnlinePaymentGateway): Promise<void>;
   updateOrderItemReviewStatus(
     orderId: string,
     productId: string,
@@ -74,13 +92,13 @@ export class OrderService implements IOrderService {
 
   // Quy trình checkout: Kiểm tra giỏ -> Khóa giá -> Tạo đơn -> Làm trống giỏ
   async checkout(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
-    // 1. Kiểm tra xem có đơn hàng VNPay nào đang chờ không (Fix bug trùng đơn)
-    const pendingVnpayOrder = await this.orderRepo.findFirst({
+    // 1. Kiểm tra xem có đơn hàng thanh toán online nào đang chờ không (Fix bug trùng đơn)
+    const pendingOnlinePaymentOrder = await this.orderRepo.findFirst({
       where: { userId, status: OrderStatus.PENDING_PAYMENT },
     });
-    if (pendingVnpayOrder) {
-      // Tự động hủy đơn hàng VNPay cũ đang chờ thanh toán
-      await this.orderRepo.updateStatus(pendingVnpayOrder.id, OrderStatus.CANCELLED);
+    if (pendingOnlinePaymentOrder) {
+      // Tự động hủy đơn hàng cũ đang chờ thanh toán
+      await this.orderRepo.updateStatus(pendingOnlinePaymentOrder.id, OrderStatus.CANCELLED);
     }
 
     // Lấy giỏ hàng của khách
@@ -318,7 +336,7 @@ export class OrderService implements IOrderService {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
-    // VNPay chỉ được hủy nếu đang pending_payment, đơn khác phải pending
+    // Đơn thanh toán online chỉ được hủy nếu đang pending_payment, đơn khác phải pending
     if (order.status === OrderStatus.PENDING_PAYMENT) {
       // Hợp lệ, tiếp tục hủy
     } else if (order.status !== OrderStatus.PENDING) {
@@ -412,16 +430,20 @@ export class OrderService implements IOrderService {
     return updated;
   }
 
-  // ─── VNPay: Tạo đơn hàng chờ thanh toán ──────────────────────────────────────
+  // ─── Cổng thanh toán online (VNPay/ZaloPay): Tạo đơn hàng chờ thanh toán ─────
   // Chỉ tạo order với status="pending_payment"
   // KHÔNG xóa giỏ hàng, KHÔNG gửi email, KHÔNG thông báo admin
-  async createPendingVnpayOrder(userId: string, dto: CheckoutDto): Promise<OrderResponseDto> {
-    // Kiểm tra xem có đơn hàng VNPay nào đang chờ không
+  async createPendingOnlinePaymentOrder(
+    userId: string,
+    dto: CheckoutDto,
+    gateway: OnlinePaymentGateway,
+  ): Promise<OrderResponseDto> {
+    // Kiểm tra xem có đơn hàng chờ thanh toán online nào đang chờ không (dù VNPay hay ZaloPay)
     const existingPendingOrder = await this.orderRepo.findFirst({
       where: { userId, status: OrderStatus.PENDING_PAYMENT },
     });
     if (existingPendingOrder) {
-      // Tự động hủy đơn hàng VNPay cũ
+      // Tự động hủy đơn hàng cũ đang chờ thanh toán
       await this.orderRepo.updateStatus(existingPendingOrder.id, OrderStatus.CANCELLED);
     }
 
@@ -481,49 +503,55 @@ export class OrderService implements IOrderService {
     ]);
 
     // Schedule cleanup job sau 15 phút — hủy nếu vẫn pending_payment
-    await vnpayCleanupQueue.add(
-      "cleanup-vnpay-order",
+    await CLEANUP_QUEUES[gateway].add(
+      `cleanup-${gateway}-order`,
       { orderId: order.id },
       {
         delay: 15 * 60 * 1000, // 15 phút
-        jobId: `vnpay:cleanup:${order.id}`, // Dedup — mỗi order chỉ 1 job cleanup
+        jobId: `${gateway}:cleanup:${order.id}`, // Dedup — mỗi order chỉ 1 job cleanup
       },
     );
 
     return OrderResponseDto.from(order);
   }
 
-  // ─── VNPay: Xác nhận thanh toán thành công ──────────────────────────────────
-  // Gọi khi IPN callback xác nhận thanh toán OK
+  // ─── Cổng thanh toán online (VNPay/ZaloPay): Xác nhận thanh toán thành công ─
+  // Gọi khi IPN/callback xác nhận thanh toán OK
   // Lúc này mới: cập nhật status, xóa giỏ hàng, gửi email, thông báo admin
-  async confirmVnpayPayment(orderId: string, paidAmount?: number): Promise<OrderResponseDto> {
+  async confirmOnlinePayment(
+    gateway: OnlinePaymentGateway,
+    orderId: string,
+    paidAmount?: number,
+  ): Promise<OrderResponseDto> {
+    const gatewayLabel = GATEWAY_LABELS[gateway];
+
     // 1. Lấy order từ DB
     const order = await this.orderRepo.findById(orderId);
     if (!order) {
       throw new AppError("Không tìm thấy đơn hàng", 404);
     }
 
-    // Tránh xử lý trùng (IPN có thể gọi nhiều lần)
+    // Tránh xử lý trùng (IPN/callback có thể gọi nhiều lần)
     if (order.paymentStatus === PaymentStatus.PAID) {
       return OrderResponseDto.from(order);
     }
 
-    // Defense-in-depth: số tiền VNPay báo về (đã ký HMAC, khó giả mạo) phải khớp
+    // Defense-in-depth: số tiền cổng thanh toán báo về (đã ký HMAC, khó giả mạo) phải khớp
     // với giá trị đơn hàng lưu trong DB — phòng trường hợp orderId bị đoán/dò và
     // logic tạo URL thanh toán ở nơi khác vô tình gửi sai amount.
     if (paidAmount !== undefined && Math.round(paidAmount) !== Math.round(Number(order.totalPrice))) {
       throw new AppError(
-        `Số tiền thanh toán VNPay (${paidAmount}) không khớp với giá trị đơn hàng (${order.totalPrice})`,
+        `Số tiền thanh toán ${gatewayLabel} (${paidAmount}) không khớp với giá trị đơn hàng (${order.totalPrice})`,
         400,
       );
     }
 
-    // Chặn hồi sinh đơn đã bị hủy: nếu user mở 2 lần checkout VNPay,
-    // đơn cũ đang PENDING_PAYMENT sẽ tự bị hủy (xem checkout()/createPendingVnpayOrder()).
-    // Nếu IPN của đơn cũ đó vẫn tới sau khi đã bị hủy, không được phép "hồi sinh" nó.
+    // Chặn hồi sinh đơn đã bị hủy: nếu user mở 2 lần checkout online,
+    // đơn cũ đang PENDING_PAYMENT sẽ tự bị hủy (xem checkout()/createPendingOnlinePaymentOrder()).
+    // Nếu IPN/callback của đơn cũ đó vẫn tới sau khi đã bị hủy, không được phép "hồi sinh" nó.
     if (order.status !== OrderStatus.PENDING_PAYMENT) {
       throw new AppError(
-        `Đơn hàng #${order.id} không còn ở trạng thái chờ thanh toán (hiện tại: ${order.status}), bỏ qua xác nhận VNPay`,
+        `Đơn hàng #${order.id} không còn ở trạng thái chờ thanh toán (hiện tại: ${order.status}), bỏ qua xác nhận ${gatewayLabel}`,
         409,
       );
     }
@@ -543,12 +571,12 @@ export class OrderService implements IOrderService {
 
     // 4. Ghi log + thông báo admin
     const totalPrice = Number(order.totalPrice);
-    const message = `Có đơn hàng mới thanh toán VNPay thành công với giá trị ${totalPrice.toLocaleString("vi-VN")}đ`;
+    const message = `Có đơn hàng mới thanh toán ${gatewayLabel} thành công với giá trị ${totalPrice.toLocaleString("vi-VN")}đ`;
 
     await this.activityLogService.create({
       type: "ORDER_CREATED",
       message,
-      data: { orderId: order.id, totalPrice, paymentMethod: "vnpay" },
+      data: { orderId: order.id, totalPrice, paymentMethod: gateway },
     });
 
     getIO().to("chat:admin").emit("order:new", {
@@ -609,13 +637,14 @@ export class OrderService implements IOrderService {
     return stats;
   }
 
-  // ─── VNPay: Hủy đơn hàng hết hạn (gọi bởi BullMQ delayed job) ──────────────
-  async cancelExpiredVnpayOrder(orderId: string): Promise<void> {
+  // ─── Cổng thanh toán online: Hủy đơn hàng hết hạn (gọi bởi BullMQ delayed job) ─
+  async cancelExpiredOnlinePaymentOrder(orderId: string, gateway: OnlinePaymentGateway): Promise<void> {
+    const gatewayLabel = GATEWAY_LABELS[gateway];
     const order = await this.orderRepo.findById(orderId);
     // Đơn đã thanh toán hoặc không tồn tại → bỏ qua, không làm gì
     if (!order || order.status !== OrderStatus.PENDING_PAYMENT) return;
 
-    // Hủy đơn do quá hạn VNPay (không cần cập nhật kho vì createPendingVnpayOrder chưa trừ kho)
+    // Hủy đơn do quá hạn (không cần cập nhật kho vì createPendingOnlinePaymentOrder chưa trừ kho)
     const updatedOrder = await this.orderRepo.updateStatus(orderId, OrderStatus.CANCELLED);
     if (!updatedOrder) return;
 
@@ -623,7 +652,7 @@ export class OrderService implements IOrderService {
     const shortId = updatedOrder.id.split("-")[0].toUpperCase();
     await this.activityLogService.create({
       type: "ORDER_CANCELLED",
-      message: `Hệ thống tự động hủy đơn VNPay #${shortId} do quá hạn 15 phút`,
+      message: `Hệ thống tự động hủy đơn ${gatewayLabel} #${shortId} do quá hạn 15 phút`,
       data: { orderId: updatedOrder.id, totalPrice: updatedOrder.totalPrice },
     });
 
@@ -640,7 +669,7 @@ export class OrderService implements IOrderService {
     getIO().to(`user:${updatedOrder.userId}`).emit("order:status_updated", {
       orderId: updatedOrder.id,
       status: "cancelled",
-      message: "Đơn hàng VNPay đã bị hủy do quá hạn thanh toán (15 phút)",
+      message: `Đơn hàng ${gatewayLabel} đã bị hủy do quá hạn thanh toán (15 phút)`,
     });
   }
 }
